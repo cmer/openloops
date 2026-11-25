@@ -1,0 +1,36 @@
+{
+  "name": "open-loops",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"tsx watch server/index.ts\" \"vite --host 0.0.0.0 --port 4731\"",
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "start": "NODE_ENV=production node dist/server/index.js",
+    "seed": "tsx scripts/seed.ts",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.client.json && tsc -p tsconfig.tests.json"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.6",
+    "better-sqlite3": "^12.4.1",
+    "hono": "^4.10.4"
+  },
+  "devDependencies": {
+    "@fontsource/instrument-sans": "^5.2.8",
+    "@fontsource/instrument-serif": "^5.2.8",
+    "@tailwindcss/vite": "^4.1.17",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.19.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "concurrently": "^9.2.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwindcss": "^4.1.17",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.1",
+    "vitest": "^3.2.4"
+  }
+}

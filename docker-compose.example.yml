@@ -1,0 +1,43 @@
+# Local quick start. INSECURE_ALLOW_UNPROTECTED defaults to 1 so a browser on
+# your machine can open http://localhost:4732. Docker publishes the port through
+# the bridge, which is not loopback, so the UI would otherwise refuse to load.
+#
+# Before this port is reachable beyond your machine, or before you point a
+# tunnel at it, set INSECURE_ALLOW_UNPROTECTED to empty and set
+# CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD. A configured Access check is never
+# skipped, even if the insecure switch is left on.
+
+services:
+  open-loops:
+    build: .
+    ports:
+      - "4732:4732"
+    environment:
+      PORT: "4732"
+      NODE_ENV: production
+      DATABASE_PATH: /data/open-loops.db
+      ASSISTANT_NAME: ${ASSISTANT_NAME:-Assistant}
+      API_TOKEN: ${API_TOKEN:-}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_KEY: ${WEBHOOK_KEY:-}
+      CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}
+      CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
+      INSECURE_ALLOW_UNPROTECTED: ${INSECURE_ALLOW_UNPROTECTED:-1}
+    volumes:
+      - open-loops-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4732/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  open-loops-data:
