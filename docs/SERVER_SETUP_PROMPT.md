@@ -71,7 +71,7 @@ sudo git clone https://github.com/cmer/openloops.git /opt/openloops/src
 
 The repository may be private. If the clone asks for credentials, stop and ask me which I prefer: a read-only deploy key you generate on the server (show me the public key and where to add it on GitHub), a fine-grained read-only token I put in a file, or me copying the source to the server. Do not store GitHub credentials in `/opt/openloops/.env`.
 
-Record the commit you deployed (`git -C /opt/openloops/src rev-parse --short HEAD`). Read `/opt/openloops/src/README.md`, sections "Environment" and "Cloudflare Tunnel and Access". If anything there contradicts this prompt, the README wins. Tell me what differed.
+Record the commit you deployed (`git -C /opt/openloops/src rev-parse --short HEAD`). Read `/opt/openloops/src/docs/SELF_HOSTING.md`, sections "Environment" and "Cloudflare Tunnel and Access". If anything there contradicts this prompt, that file wins. Tell me what differed.
 
 ## 4. Write the env file
 
