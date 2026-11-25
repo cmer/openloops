@@ -79,6 +79,8 @@ Seed data is fictional (a made-up bakery, a mascot, Northwind Supply) and safe t
 
 Remove `INSECURE_ALLOW_UNPROTECTED` before anyone but you can reach the port. The next section is how.
 
+To have a coding agent do the whole server install (Docker Compose, Cloudflare Tunnel, Access, and the hand-off to your assistant), paste `docs/SERVER_SETUP_PROMPT.md` into an agent with a shell on the server.
+
 ## Environment
 
 Copy `.env.example`. Do not commit a filled-in `.env`.
