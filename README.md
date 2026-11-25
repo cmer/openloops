@@ -38,9 +38,9 @@ A list card shows the title, source, age in days (older than 7 days is highlight
 
 Snoozed cards are hidden until `snoozed_until`, then they come back. An open card with no activity for 7 days moves to Stalled and keeps its previous section in `original_section`. A later edit, reply, or patch brings it back. Re-upserting the same title with the original section does not clear the stall, so a routine sync will not undo it. Omit `last_activity_at` on those upserts unless you mean to set the clock.
 
-The sidebar shows counts, overdue items, the last time the assistant called `POST /api/sync/complete`, and how many webhook events are still queued. Blur for sharing hides titles and notes. The board refreshes every 60 seconds. Actions update the page immediately, then the server confirms them. The message box above the board sends a freeform note to the assistant. It does not become a card.
+The sidebar shows counts, overdue items, the last time the assistant called `POST /api/sync/complete`, and how many webhook events are still queued. Blur for sharing hides titles and notes. The board refreshes every 60 seconds. Actions update the page immediately, then the server confirms them. The message box above the board sends a freeform note to the assistant. It does not become a card. Typing `@` offers the assistant and any other bots it published with `PUT /api/bots`; a tagged message still goes to the assistant's webhook, with `to` set, for it to relay.
 
-Limits enforced by the API: title 300 characters, body 20,000, source / owner / external key / choice 200, option label and value 120, at most 12 options, reply / note / ping 4,000, 200 cards per upsert, 500 outbox ids per ack, request body 1,000,000 bytes.
+Limits enforced by the API: title 300 characters, body 20,000, source / owner / external key / choice 200, option label and value 120, at most 12 options, reply / note / message 4,000, 200 cards per upsert, 500 outbox ids per ack, request body 1,000,000 bytes.
 
 ## Architecture
 
@@ -151,7 +151,7 @@ X-Automation-Key: <WEBHOOK_KEY>
 | `reply` | The reply text. The card stays open. |
 | `choose` | The chosen option's `value`. The card is done. |
 | `move` | The new section id. |
-| `message` | The ping text. `item_id`, `external_key`, and `title` are `null`. |
+| `message` | The message text. `item_id`, `external_key`, and `title` are `null`. When the person tagged another bot, `to` is its handle and `to_name` its name; pass the message on to that bot. Messages for the assistant itself have no `to`. |
 
 This is a shared secret on HTTPS, not a signature over the body. Verify it by comparing `Authorization` (after the `Bearer ` prefix) or `X-Automation-Key` to `WEBHOOK_KEY` with a constant-time compare. Reject the request when neither matches. Do not log the headers. Both headers carry the same key so a receiver that only looks at one of them still works.
 
@@ -165,6 +165,7 @@ If the POST fails or the URL is unset, the same JSON is stored in the outbox. Th
 4. `GET /api/events?since=<cursor>` for actions the webhook missed. `since` is exclusive. Only `user` events are returned.
 5. `GET /api/outbox`, act, then `POST /api/outbox/ack` with the ids you handled.
 6. `POST /api/sync/complete` so the sidebar can show the sync time.
+7. If you relay messages to other bots, `PUT /api/bots` with the current list whenever it changes, so the message box can offer them after `@`.
 
 A reply stays open until you close the card. A choice is already done; do the thing they picked. A drop means do not recreate that key. A snooze means stay quiet until `value`. A move is the person correcting your filing. `docs/GROKBOT_SETUP_PROMPT.md` is a copy-paste prompt for wiring an assistant that has routines, a webhook trigger, memory, and a secrets store.
 
@@ -327,6 +328,32 @@ curl -s -X POST "$BASE/api/sync/complete" \
 { "last_synced_at": "2026-11-25T12:00:00.000Z" }
 ```
 
+### PUT /api/bots
+
+Replaces the list of other bots the message box offers after `@`. Send the whole list each time; an empty list removes them all. The assistant itself is always first and is not part of the list. Messages to any bot still go to the assistant's webhook, with `to` set (see Webhook), and the assistant passes them on.
+
+Each bot needs a `name` (up to 60 characters). `handle` is optional: by default it comes from the name, lowercased, with accents removed and spaces and punctuation turned into underscores, so `Email Bot` becomes `email_bot`. Pass `handle` (lowercase letters, digits, `_`, `-`, up to 32) to keep a tag stable when a name changes. `description` (up to 200) shows in the autocomplete. At most 50 bots. A bot whose handle matches the assistant's is skipped and listed in `skipped`.
+
+```bash
+curl -s -X PUT "$BASE/api/bots" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"bots":[{"name":"Email Bot","description":"Drafts replies"},{"name":"Calendar","handle":"cal"}]}'
+```
+
+```json
+{
+  "bots": [
+    { "handle": "assistant", "name": "Assistant", "description": null, "primary": true },
+    { "handle": "email_bot", "name": "Email Bot", "description": "Drafts replies", "primary": false },
+    { "handle": "cal", "name": "Calendar", "description": null, "primary": false }
+  ],
+  "skipped": []
+}
+```
+
+`GET /api/bots` returns the same `bots` list.
+
 ### GET /api/outbox
 
 Undelivered webhook bodies, oldest first.
@@ -377,7 +404,10 @@ These are for the page. They require Access (or a local escape hatch). They do n
 | `GET /hq/board` | | `{ generated_at, assistant_name, last_synced_at, outbox_count, items }` |
 | `GET /hq/items/:id` | | `{ item, events }` |
 | `POST /hq/items/:id/act` | `{ "type": "done" \| "snooze" \| "drop" \| "reply" \| "choose" \| "move", "value"?: "..." }` | `{ ok, delivered, outbox_count, item }` |
-| `POST /hq/message` | `{ "text": "..." }` | `{ ok, delivered, outbox_count }` |
+| `GET /hq/bots` | | `{ bots }`, the same list as `GET /api/bots` |
+| `POST /hq/message` | `{ "text": "...", "to"?: "handle" }` | `{ ok, delivered, outbox_count, to }` |
+
+Without `to`, a message that starts with `@handle ` for a known bot goes to that bot, minus the tag. Any other leading `@word` stays in the text and goes to the assistant. An unknown `to` is a 400.
 
 `snooze` needs a future ISO `value`. `reply` and `choose` need `value`. `move` needs a section other than `done`.
 

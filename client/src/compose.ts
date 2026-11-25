@@ -1,4 +1,4 @@
-export type Bot = { handle: string; name: string; primary?: boolean; description?: string };
+export type Bot = { handle: string; name: string; primary?: boolean; description?: string | null };
 
 /** Until the server has a bot registry, the only bot is the assistant itself. */
 export function fallbackBots(assistantName: string): Bot[] {
@@ -16,6 +16,12 @@ export type Parsed = {
   typingTag: boolean;
   handle: string;
 };
+
+/** Bots whose handle or name starts with what was typed after "@". */
+export function matchBots(bots: Bot[], typed: string): Bot[] {
+  const query = typed.toLowerCase();
+  return bots.filter((bot) => bot.handle.startsWith(query) || bot.name.toLowerCase().replace(/\s+/g, "_").startsWith(query));
+}
 
 /** A leading @handle picks the bot. Anything else goes to the primary bot. Only a tag at the very start counts. */
 export function parseMessage(text: string, bots: Bot[]): Parsed {

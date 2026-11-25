@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
 import type { Item, ItemStatus, Section } from "../shared/types.js";
+import type { Bot } from "./bots.js";
 import { HttpError } from "./errors.js";
 import type { ItemChanges, ParsedAction } from "./validate.js";
 
@@ -38,6 +39,9 @@ export type WebhookBody = {
   title: string | null;
   value: string | null;
   at: string;
+  /** Message webhooks to another bot: its handle and name. Absent for messages to the assistant. */
+  to?: string;
+  to_name?: string;
 };
 
 export type StoredEvent = {
@@ -96,6 +100,12 @@ export function openDatabase(path: string): DB {
       payload_json TEXT NOT NULL,
       created_at TEXT NOT NULL,
       acked_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS bots (
+      handle TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT,
+      position INTEGER NOT NULL
     );
     CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
@@ -547,13 +557,13 @@ export function applyUserAction(db: DB, id: number, action: ParsedAction, now: D
   };
 }
 
-export function recordUserMessage(db: DB, text: string, now: Date): WebhookBody {
+export function recordUserMessage(db: DB, text: string, now: Date, to?: { handle: string; name: string }): WebhookBody {
   const iso = now.toISOString();
   insertEvent(db, {
     item_id: null,
     actor: "user",
     type: "message",
-    payload: { value: text },
+    payload: to ? { value: text, to: to.handle } : { value: text },
     created_at: iso,
   });
   return {
@@ -563,7 +573,27 @@ export function recordUserMessage(db: DB, text: string, now: Date): WebhookBody 
     title: null,
     value: text,
     at: iso,
+    ...(to ? { to: to.handle, to_name: to.name } : {}),
   };
+}
+
+/** The bots the assistant published, in its order. */
+export function listBots(db: DB): Bot[] {
+  const rows = db.prepare(`SELECT handle, name, description FROM bots ORDER BY position ASC`).all() as {
+    handle: string;
+    name: string;
+    description: string | null;
+  }[];
+  return rows.map((row) => ({ ...row, primary: false }));
+}
+
+/** Replaces the whole list. */
+export function replaceBots(db: DB, bots: Bot[]): void {
+  const insert = db.prepare(`INSERT INTO bots (handle, name, description, position) VALUES (?, ?, ?, ?)`);
+  db.transaction(() => {
+    db.prepare(`DELETE FROM bots`).run();
+    bots.forEach((bot, index) => insert.run(bot.handle, bot.name, bot.description, index));
+  })();
 }
 
 export function reconcile(db: DB, now = new Date()): void {

@@ -1,9 +1,12 @@
 import { useEffect, useId, useState, type FormEvent, type KeyboardEvent } from "react";
-import { parseMessage, type Bot } from "./compose";
+import { matchBots, parseMessage, type Bot } from "./compose";
 import { Btn } from "./primitives";
 
 /** Sends `body` to the bot with handle `to`. Resolves with whether it was delivered or queued. */
 export type Send = (body: string, to: string) => Promise<{ delivered: boolean }>;
+
+/** The name adds nothing when it is just the handle in another case ("Walter" for @walter). */
+const showName = (bot: Bot) => bot.name.toLowerCase() !== bot.handle;
 
 type Status = { kind: "ok" | "queued" | "error" | "sending"; text: string };
 
@@ -19,7 +22,7 @@ export function Composer({ bots, send }: { bots: Bot[]; send: Send }) {
 
   const parsed = parseMessage(text, bots);
   const bad = parsed.tagged && !parsed.bot && !parsed.typingTag;
-  const matches = parsed.tagged && parsed.typingTag && !closed ? bots.filter((bot) => bot.handle.startsWith(parsed.handle)) : [];
+  const matches = parsed.tagged && parsed.typingTag && !closed ? matchBots(bots, parsed.handle) : [];
   const active = matches[Math.min(index, matches.length - 1)];
   const sending = status?.kind === "sending";
 
@@ -135,7 +138,9 @@ export function Composer({ bots, send }: { bots: Bot[]; send: Send }) {
             >
               <span className="h">@{bot.handle}</span>
               {bot.primary ? <span className="p">Primary</span> : <span />}
-              {bot.description && <span className="d">{bot.description}</span>}
+              {(showName(bot) || bot.description) && (
+                <span className="d">{[showName(bot) ? bot.name : null, bot.description].filter(Boolean).join(" · ")}</span>
+              )}
             </li>
           ))}
         </ul>
