@@ -1,3 +1,4 @@
+import { useEffect, useRef, type ReactNode } from "react";
 import type { Item } from "../../shared/types";
 import type { Groups } from "./order";
 import { Btn } from "./primitives";
@@ -83,11 +84,7 @@ export function Sidebar(props: Props) {
     <aside className="ol-side" aria-label="OpenLoops">
       <div className="ol-side-brand">
         <span className="ol-wordmark">OpenLoops</span>
-        <span className="ol-kicker">You + {name}</span>
-        <details className="ol-menu">
-          <summary className="ol-btn ol-btn--sm">More</summary>
-          <div className="ol-menu-pop">{tools("menu")}</div>
-        </details>
+        <OverflowMenu>{tools("menu")}</OverflowMenu>
       </div>
 
       <div className="ol-side-status">
@@ -126,8 +123,43 @@ export function Sidebar(props: Props) {
         })}
       </nav>
 
-      <div className="ol-side-foot">{tools("side")}</div>
+      <div className="ol-side-foot">
+        <OverflowMenu up>{tools("side")}</OverflowMenu>
+      </div>
     </aside>
+  );
+}
+
+/** "More" menu holding Refresh, Blur and Theme. The sidebar footer copy opens upward (desktop);
+ *  the brand-row copy opens downward (phones). Closes on Escape or a click outside. */
+function OverflowMenu({ up = false, children }: { up?: boolean; children: ReactNode }) {
+  const ref = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const close = () => {
+      if (ref.current) ref.current.open = false;
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (ref.current?.open && !ref.current.contains(event.target as Node)) close();
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !ref.current?.open) return;
+      close();
+      ref.current.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+  return (
+    <details ref={ref} className={`ol-menu${up ? " ol-menu--up" : ""}`}>
+      <summary className="ol-btn ol-btn--sm ol-menu-trigger" aria-label="More: refresh, blur and theme" title="More">
+        <span aria-hidden="true">⋮</span>
+      </summary>
+      <div className="ol-menu-pop">{children}</div>
+    </details>
   );
 }
 
