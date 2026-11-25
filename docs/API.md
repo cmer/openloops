@@ -174,6 +174,71 @@ curl -s "$BASE/api/items?status=open&section=action" \
 { "items": [] }
 ```
 
+### GET /api/summary
+
+Counts of open items, for dashboards. Accepts `API_TOKEN` or the read-only `SUMMARY_TOKEN`, which unlocks this route and nothing else.
+
+- `needs_action`: open items in `action`.
+- `waiting_on_you`: open items in `question_for_you`.
+- `overdue`: open items in any section whose `due_at` has passed. The board flags the same items.
+- `decisions`, `open`, and `sections` (every section except `done`) are there for other layouts.
+
+Items that go a week without activity move to `stalled` and leave their original section's count.
+
+```bash
+curl -s "$BASE/api/summary" -H "Authorization: Bearer $SUMMARY_TOKEN"
+```
+
+```json
+{
+  "generated_at": "2026-11-25T18:04:00.000Z",
+  "needs_action": 3,
+  "waiting_on_you": 1,
+  "overdue": 2,
+  "decisions": 1,
+  "open": 9,
+  "sections": {
+    "decision": 1,
+    "action": 3,
+    "question_for_you": 1,
+    "question_from_you": 0,
+    "stalled": 2,
+    "waiting_on_others": 2
+  },
+  "last_synced_at": "2026-11-25T17:30:00.000Z"
+}
+```
+
+#### Homepage card
+
+[Homepage](https://gethomepage.dev/) can show these counts with its `customapi` widget. Homepage's server makes the request, so an internal URL works and the token never reaches the browser. Add this to `services.yaml`:
+
+```yaml
+- Work:
+    - OpenLoops:
+        icon: mdi-sync
+        href: https://openloops.example.com/
+        description: Open loops
+        widget:
+          type: customapi
+          url: http://openloops:4732/api/summary
+          refreshInterval: 60000
+          headers:
+            Authorization: Bearer <SUMMARY_TOKEN>
+          mappings:
+            - field: needs_action
+              label: Needs your action
+              format: number
+            - field: waiting_on_you
+              label: Waiting on you
+              format: number
+            - field: overdue
+              label: Overdue
+              format: number
+```
+
+Use `http://openloops:4732` when Homepage shares a Docker network with OpenLoops. Otherwise use the host and published port. If Homepage reaches OpenLoops through Cloudflare Access, `/api` must be bypassed (see [SELF_HOSTING.md](SELF_HOSTING.md)). Homepage cards show four blocks across, so one more field fits. `decisions` is a good fourth.
+
 ### GET /api/events
 
 Actions taken on the board only (`actor` is `user`), oldest first. `since` is exclusive. Assistant upserts are not included.

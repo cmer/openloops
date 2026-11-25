@@ -493,3 +493,43 @@ describe("aging and snooze", () => {
     expect(board.last_synced_at).toBe(at);
   });
 });
+
+describe("summary", () => {
+  it("counts open items per section and overdue ones, with either token", async () => {
+    const now = new Date("2026-11-25T12:00:00.000Z");
+    const app = createApp({ db, apiToken: TOKEN, summaryToken: "read-only", fetchImpl: okFetch, now: () => now });
+    const post = (path: string, body: unknown) =>
+      app.request(path, {
+        method: "POST",
+        headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    await post("/api/items/upsert", [
+      { section: "action", title: "Late action", due_at: "2026-11-24T00:00:00.000Z" },
+      { section: "action", title: "Future action", due_at: "2026-11-30T00:00:00.000Z" },
+      { section: "question_for_you", title: "Late question", due_at: "2026-11-20T00:00:00.000Z" },
+      { section: "decision", title: "Pick one" },
+      { section: "action", title: "Closed late", due_at: "2026-11-01T00:00:00.000Z" },
+    ]);
+    await post("/api/items/5/close", { status: "done" });
+
+    expect((await app.request("/api/summary")).status).toBe(401);
+    expect((await app.request("/api/summary", { headers: { authorization: "Bearer wrong" } })).status).toBe(401);
+    // The read-only token unlocks the summary and nothing else.
+    expect((await app.request("/api/items", { headers: { authorization: "Bearer read-only" } })).status).toBe(401);
+
+    for (const token of [TOKEN, "read-only"]) {
+      const res = await app.request("/api/summary", { headers: { authorization: `Bearer ${token}` } });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({
+        needs_action: 2,
+        waiting_on_you: 1,
+        overdue: 2,
+        decisions: 1,
+        open: 4,
+        sections: { action: 2, question_for_you: 1, decision: 1, stalled: 0 },
+      });
+    }
+  });
+});
