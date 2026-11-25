@@ -1,8 +1,18 @@
-node_modules
+# Only what the build stage copies is needed; keep the context small so
+# unrelated edits don't bust the cache or slow the upload.
+**/node_modules
 dist
 data
-.git
-.env
-docs
-*.md
 coverage
+tests
+docs
+.git
+.github
+.impeccable
+.env
+.env.*
+*.md
+*.log
+Dockerfile
+.dockerignore
+docker-compose*.yml
