@@ -279,8 +279,17 @@ export function App() {
           onTheme={setTheme}
         />
         <div className="ol-content">
-          <Topbar assistantName={assistantName} view={view} filter={filter} onView={chooseView} />
-          <main className={`ol-main${view === "kanban" ? " ol-main--wide" : ""}`}>
+          <Topbar
+            assistantName={assistantName}
+            view={view}
+            filter={filter}
+            onView={chooseView}
+            onFilter={chooseFilter}
+            groups={groups}
+            items={board?.items ?? []}
+            now={now}
+          />
+          <main className={`ol-main${view === "kanban" ? " ol-main--wide" : filteredSection ? " ol-main--single" : ""}`}>
             <Composer bots={bots} send={sendMessage} />
             {loading && !board && <LoadingBoard />}
             {loadError && !board && <LoadError message={loadError} onRetry={() => void load(false)} />}

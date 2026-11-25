@@ -602,19 +602,53 @@ a.ol-chip:hover { border-color: var(--ol-ink-2); background: var(--ol-raise); }
   }
   .ol-side-brand, .ol-side-status { padding: 0; }
   .ol-side-status { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; align-items: center; }
-  .ol-nav {
-    display: flex; gap: 0.375rem; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
-    margin-inline: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); padding: 0.125rem max(16px, env(safe-area-inset-left, 0px));
-  }
-  .ol-nav::-webkit-scrollbar { display: none; }
-  .ol-nav-item { flex: none; width: auto; min-height: var(--ol-tap); padding: 0 0.75rem; border: 1px solid var(--ol-rule-strong); border-radius: 999px; }
-  .ol-nav-item[aria-current="true"] { background: var(--ol-ink); color: var(--ol-sheet); box-shadow: none; border-color: var(--ol-ink); }
-  .ol-nav-item[aria-current="true"] .n { color: inherit; opacity: 0.75; }
-  .ol-nav-item.is-empty:not([aria-current="true"]) { display: none; }
-  .ol-nav-sep, .ol-side-foot { display: none; }
+  /* The section list moves into the Topbar's picker sheet. */
+  .ol-nav, .ol-side-foot { display: none; }
   .ol-menu { display: block; }
   .ol-topbar { position: static; padding-left: max(16px, env(safe-area-inset-left, 0px)); }
+  .ol-topbar h1, .ol-topbar-layout { display: none; }
+  .ol-topbar p { margin-top: -0.25rem; }
+  .ol-topbar .ol-picker { display: inline-flex; }
+  /* Filtered to one section, the picker already names it, so its sheet header would repeat it. */
+  .ol-app[data-look] .ol-main--single .ol-section-head { display: none; }
 }
+
+/* ---------- phone section picker + bottom sheet --------------------------- */
+
+.ol-picker {
+  display: none; align-items: center; gap: 0.5rem; min-height: var(--ol-tap); margin: 0 -0.5rem; padding: 0 0.5rem;
+  border: 0; border-radius: var(--ol-radius); background: none; color: var(--ol-ink); cursor: pointer;
+  font: 650 1.1875rem/1.2 var(--ol-font-sans); letter-spacing: -0.01em; text-align: left;
+}
+.ol-picker:hover, .ol-picker[aria-expanded="true"] { background: var(--ol-raise); }
+.ol-picker-n { font: 500 0.875rem/1 var(--ol-font-sans); color: var(--ol-ink-3); font-variant-numeric: tabular-nums; }
+.ol-picker-caret { flex: none; color: var(--ol-ink-3); }
+
+.ol-sheet {
+  position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: calc(100dvh - 3rem);
+  display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--ol-sheet); border-radius: 14px 14px 0 0; box-shadow: var(--ol-shadow-dialog);
+  padding: 0.5rem 0 calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  animation: ol-sheet-in 180ms ease-out;
+}
+@keyframes ol-sheet-in { from { transform: translateY(24px); opacity: 0; } }
+.ol-sheet-scrim { animation: ol-fade-in 180ms ease-out; }
+@keyframes ol-fade-in { from { opacity: 0; } }
+.ol-sheet-grab { width: 2.25rem; height: 4px; border-radius: 2px; background: var(--ol-rule-strong); margin: 0 auto 0.5rem; }
+.ol-sheet-list { overflow-y: auto; overscroll-behavior: contain; display: grid; align-content: start; }
+.ol-sheet-item {
+  display: flex; align-items: center; gap: 0.5rem; min-height: var(--ol-tap);
+  padding: 0 max(1.125rem, env(safe-area-inset-right, 0px)) 0 max(1.125rem, env(safe-area-inset-left, 0px));
+  border: 0; background: transparent; color: var(--ol-ink); font: 500 0.9375rem/1.2 var(--ol-font-sans); text-align: left; cursor: pointer;
+}
+.ol-sheet-item:hover { background: var(--ol-raise); }
+.ol-sheet-item.is-empty { color: var(--ol-ink-3); }
+.ol-sheet-item[aria-current="true"] { background: var(--ol-accent-wash); color: var(--ol-ink); font-weight: 600; }
+.ol-sheet-item .n { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ol-ink-3); font-weight: 500; }
+.ol-sheet-item[aria-current="true"] .n { color: var(--ol-ink-2); }
+.ol-sheet-list .ol-nav-sep { margin: 0.25rem 1.125rem; }
+.ol-sheet-layout { display: flex; margin: 0.625rem 1.125rem 0; }
+.ol-sheet-layout .ol-btn { flex: 1; }
 
 /* ==========================================================================
    Composer: message any bot. Plain text → primary bot; leading @handle → that bot.
