@@ -34,17 +34,20 @@ Ask these one at a time. Repeat each answer back and wait for me to confirm it.
 1. **Hostname.** The public name for the board, like `loops.example.com`. Its zone (`example.com`) must already be on my Cloudflare account.
 2. **Who may open the board.** One or more email addresses, or an email domain. These go in the Access allow policy.
 3. **Assistant name.** Shown on the board. Default `Grok Bot`.
-4. **Cloudflare access.** Ask whether I can create a Cloudflare API token for you. If yes, have me create a custom token at <https://dash.cloudflare.com/profile/api-tokens> with:
-   - Account · Cloudflare Tunnel · Edit
-   - Account · Access: Apps and Policies · Edit
-   - Account · Access: Organizations, Identity Providers, and Groups · Edit
-   - Zone · DNS · Edit, limited to the board's zone
-   - Zone · Zone · Read, limited to the same zone
-   - A TTL of one day is enough. The token is only needed during setup.
+4. **Cloudflare access.** You will set Cloudflare up with the `cf` CLI (section 6A). It can sign in two ways. Ask me which one I want:
+   - **API token (recommended).** I create a custom token at <https://dash.cloudflare.com/profile/api-tokens> with these permissions. The dashboard may label them Edit or Write.
+     - Account · Cloudflare Tunnel · Edit
+     - Account · Access: Apps and Policies · Edit
+     - Account · Access: Organizations, Identity Providers, and Groups · Edit
+     - Zone · DNS · Edit, for the board's zone only
+     - Zone · Zone · Read, for the same zone
 
-   Ask me to put it in a file on the server instead of pasting it into this chat, for example by running `install -m 600 /dev/null /root/.cf-setup-token && nano /root/.cf-setup-token`. If I paste it into the chat anyway, use it, and remind me at the end to delete it in the dashboard. If I say no to a token, you will do the server side and I will do the Cloudflare side by hand (section 6B).
+     Setup is the only time it is needed, so a one-day TTL is enough. Ask me to put it in a file on the server rather than paste it here: `sudo install -m 600 /dev/null /root/.cf-setup-token && sudo nano /root/.cf-setup-token`. If I paste it into the chat anyway, use it, and remind me at the end to delete it in the dashboard.
+   - **Browser login.** `cf auth login --no-browser` prints a link and a code, and I approve them from any browser. There is no token to create. That login's scopes may not cover Zero Trust. If a call fails on permissions, switch to a token.
 
-Also check whether Cloudflare Zero Trust is turned on for my account. If I do not know, the API call in section 6 will tell you. If it is not on, I have to do that once in the dashboard (Zero Trust, pick a team name, choose the Free plan). You cannot do it for me.
+   If I want neither, you do the server side and I do the Cloudflare side by hand (section 6B).
+
+Also check whether Cloudflare Zero Trust is turned on for my account. If I do not know, step 3 of section 6A will tell you. If it is not on, I have to do that once in the dashboard (Zero Trust, pick a team name, choose the Free plan). You cannot do it for me.
 
 ## 2. Check the server
 
@@ -150,71 +153,119 @@ Check it:
 - The same call with the bearer token returns `200`. Read the token from the env file inside a subshell so it never reaches your output, for example `sudo sh -c '. /opt/openloops/.env; curl -s -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $API_TOKEN" http://127.0.0.1:4732/api/items'`.
 - `curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:4732/` returns `403`. That is correct: Access is not configured yet, the request comes through the Docker bridge, and the app refuses the UI.
 
-## 6A. Cloudflare, by API
+## 6A. Cloudflare, with the `cf` CLI
 
-Use this section if I gave you an API token. Read it from the file into a variable inside each command. Do not print it. Every call goes to `https://api.cloudflare.com/client/v4` with `Authorization: Bearer <token>`. Check `success` in every response. On an error, show me the `errors` array (it never contains the token) and stop.
+Use this section if I gave you a token, or chose `cf auth login`. You drive Cloudflare with `cf`, Cloudflare's CLI (<https://developers.cloudflare.com/cf/>). It covers every API call this setup needs and prints JSON on stdout, so pipe it through `jq`. It is a 1.0 release candidate, so pin the version: this prompt was checked against `cf@1.0.0-rc.6`. Use a newer release only if that one is gone, and tell me.
 
-If a request shape below is rejected, check the current Cloudflare API reference for that endpoint before you try something else. Do not fall back to the dashboard silently.
+**Install it.** `cf` needs Node.js (current LTS or newer). If the server has Node 22 or newer, run `sudo npm install --global cf@1.0.0-rc.6`. Otherwise do not install Node on the host. Run `cf` from a throwaway container instead:
 
-1. **Verify the token.** `GET /user/tokens/verify`. For an account-owned token, `GET /accounts/{account_id}/tokens/verify`.
-2. **Find the account and zone.** `GET /zones?name=<zone>`. Take `result[0].id` as the zone id and `result[0].account.id` as the account id. If the zone is missing, stop.
-3. **Zero Trust organization.** `GET /accounts/{account_id}/access/organizations`. Take `auth_domain`, for example `myteam.cloudflareaccess.com`. That is `CF_ACCESS_TEAM_DOMAIN`. If the call says there is no organization, stop and ask me to turn on Zero Trust (section 1), then try again.
-4. **Login method.** `GET /accounts/{account_id}/access/identity_providers`. If the list is empty, add the one-time PIN method: `POST` the same path with `{"name":"One-time PIN","type":"onetimepin","config":{}}`. Do not change existing providers.
-5. **Tunnel.** Check `GET /accounts/{account_id}/cfd_tunnel?name=openloops&is_deleted=false`. If one exists, stop and ask me. Otherwise `POST /accounts/{account_id}/cfd_tunnel` with `{"name":"openloops","config_src":"cloudflare"}`. Keep the `id`. Then `GET /accounts/{account_id}/cfd_tunnel/{tunnel_id}/token` and write the result into `TUNNEL_TOKEN` in `.env` without printing it.
-6. **Tunnel routes.** `PUT /accounts/{account_id}/cfd_tunnel/{tunnel_id}/configurations` with:
+```bash
+cf() {
+  docker run --rm -i \
+    -e CLOUDFLARE_API_TOKEN -e CLOUDFLARE_ACCOUNT_ID -e CF_SEND_TELEMETRY=false -e NO_COLOR=1 \
+    -v openloops-cf-cache:/root/.npm \
+    node:22-bookworm-slim npx --yes cf@1.0.0-rc.6 "$@"
+}
+```
 
-   ```json
-   {
-     "config": {
-       "ingress": [
-         { "hostname": "<hostname>", "service": "http://openloops:4732" },
-         { "service": "http_status:404" }
-       ]
-     }
-   }
+That function does not keep a `cf auth login` session between calls. If I chose the browser login, install Node on the host or mount a config directory into the container, and tell me which you did.
+
+**Sign in.**
+
+- Token: `export CLOUDFLARE_API_TOKEN="$(sudo cat /root/.cf-setup-token)"`, which never prints it. `cf` uses this variable ahead of any stored login.
+- Browser login: run `cf auth login --no-browser`, give me the link and code it prints, and wait for me to approve. If a call later fails on permissions, tell me which one, and ask me for a token with the scopes in section 1.
+
+Set `export CF_SEND_TELEMETRY=false NO_COLOR=1`.
+
+**Ground rules for every call.**
+
+- Before step 4, list everything you are about to create (tunnel name, hostname, DNS record, the two policies with their emails, the two applications) and wait for my yes.
+- Run each create or update once with `--dry-run` before you send it. That prints the method, URL, and body and sends nothing. Use it to check the body. You do not need to show it to me unless something looks wrong.
+- Bodies go in `--body '<json>'` or in the flags named below. Find any other command with `cf cli search "<what you want to do>"`. Do not put my hostname, email, or ids in those searches. `cf schema <command words>` shows the exact API request a command makes.
+- On an error, show me the error and stop. Do not retry with a different shape until you have checked `cf schema` or the Cloudflare API reference.
+- Keep every id you get back. The final report lists them.
+
+**Steps.**
+
+1. **Check the credential.** For a token, run `cf user tokens verify`. If that fails, the token may be account-owned, so run `cf accounts tokens verify` once you know the account id (step 2). The status must be `active`.
+2. **Find the zone and account.** Run `cf zones list --name <zone>`. Take the zone's `id` and its `account.id`, then `export CLOUDFLARE_ACCOUNT_ID=<account id>` so the account commands below know which account to use. If the zone is missing, or its status is not `active`, stop.
+3. **Get the Zero Trust team domain.** Run `cf zero-trust organization get` and take `auth_domain`, for example `myteam.cloudflareaccess.com`. That is `CF_ACCESS_TEAM_DOMAIN`. If the call fails or there is no `auth_domain`, Zero Trust is not on. Stop and ask me to turn it on (section 1), then run it again. Do not use `cf zero-trust organization create`. Turning Zero Trust on means picking a plan, and that choice is mine.
+4. **Make sure there is a login method.** Run `cf zero-trust identity-providers list`. If the list is empty, add one-time PIN:
+
+   ```bash
+   cf zero-trust identity-providers create --body '{"name":"One-time PIN","type":"onetimepin","config":{}}'
    ```
 
-7. **DNS.** `GET /zones/{zone_id}/dns_records?name=<hostname>`. If a record exists, stop and ask me. Otherwise `POST /zones/{zone_id}/dns_records` with `{"type":"CNAME","name":"<hostname>","content":"<tunnel_id>.cfargotunnel.com","proxied":true,"comment":"OpenLoops tunnel"}`.
-8. **Access policies.** Create two reusable policies with `POST /accounts/{account_id}/access/policies`:
-   - `OpenLoops allow`: `"decision":"allow"`, `include` built from my answer: `{"email":{"email":"me@example.com"}}` for each address, or `{"email_domain":{"domain":"example.com"}}`.
-   - `OpenLoops API bypass`: `"decision":"bypass"`, `"include":[{"everyone":{}}]`.
-9. **Board application.** `POST /accounts/{account_id}/access/apps`:
+   Do not change providers that already exist.
+5. **Create the tunnel.** First run `cf tunnels list --tun-types cfd_tunnel --name openloops --is-deleted false`, and check the results yourself for an exact `name` match. If one exists, stop and ask me. Otherwise:
 
-   ```json
-   {
-     "name": "OpenLoops",
-     "type": "self_hosted",
-     "domain": "<hostname>",
-     "destinations": [{ "type": "public", "uri": "<hostname>" }],
-     "session_duration": "24h",
-     "app_launcher_visible": true,
-     "policies": [{ "id": "<allow policy id>", "precedence": 1 }]
-   }
+   ```bash
+   cf tunnels create --name openloops --config-source cloudflare
    ```
 
-   Keep `aud` from the response. That is `CF_ACCESS_AUD`.
-10. **API bypass application.** `POST /accounts/{account_id}/access/apps` again:
+   Keep `id`. Do not read a token from this response. The CLI's API schema does not promise one.
+6. **Put the tunnel token in the env file.** Write the output of `cf tunnels token get <tunnel id>` straight into the `TUNNEL_TOKEN=` line of `/opt/openloops/.env` without printing it. The API returns the token as a bare string, so check whether `cf` prints it quoted (`jq -r .` strips the quotes). Then check the length, and look for a stray quote at either end.
+7. **Route the hostname to OpenLoops.** This replaces the tunnel's whole configuration. The tunnel is new, so that is fine. The last rule must be the catch-all.
 
-    ```json
-    {
+   ```bash
+   cf tunnels config update <tunnel id> --tunnel-config-ingress '[{"hostname":"<hostname>","service":"http://openloops:4732"},{"service":"http_status:404"}]'
+   ```
+
+   Do not set the `--tunnel-config-origin-request-access-*` flags. They would make `cloudflared` require an Access token on every request, and that would break the bypass on `/api` and `/healthz`. OpenLoops checks the Access token itself.
+8. **Add the DNS record.** Run `cf dns records list --zone <zone> --name <hostname>`. If any record comes back, stop and ask me. A CNAME cannot share a name with A or AAAA records. Otherwise:
+
+   ```bash
+   cf dns records create --zone <zone> --body '{"type":"CNAME","name":"<hostname>","content":"<tunnel id>.cfargotunnel.com","proxied":true,"ttl":1,"comment":"OpenLoops tunnel"}'
+   ```
+
+9. **Create the Access policies.** These are reusable policies:
+
+   ```bash
+   cf zero-trust access policies create --name "OpenLoops allow" --decision allow \
+     --include '[{"email":{"email":"me@example.com"}}]'
+   cf zero-trust access policies create --name "OpenLoops API bypass" --decision bypass \
+     --include '[{"everyone":{}}]'
+   ```
+
+   Build `--include` from my answer in section 1: one `{"email":{"email":"..."}}` per address, or `{"email_domain":{"domain":"example.com"}}`. Rules in `include` are ORed. Keep both policy ids.
+10. **Create the board application.**
+
+    ```bash
+    cf zero-trust access applications create --body '{
+      "name": "OpenLoops",
+      "type": "self_hosted",
+      "domain": "<hostname>",
+      "destinations": [{"type": "public", "uri": "<hostname>"}],
+      "session_duration": "24h",
+      "app_launcher_visible": true,
+      "policies": [{"id": "<allow policy id>", "precedence": 1}]
+    }'
+    ```
+
+    Take `aud` from the response. That is `CF_ACCESS_AUD`.
+11. **Create the API bypass application.**
+
+    ```bash
+    cf zero-trust access applications create --body '{
       "name": "OpenLoops API (bypass)",
       "type": "self_hosted",
       "domain": "<hostname>/api",
       "destinations": [
-        { "type": "public", "uri": "<hostname>/api" },
-        { "type": "public", "uri": "<hostname>/healthz" }
+        {"type": "public", "uri": "<hostname>/api"},
+        {"type": "public", "uri": "<hostname>/healthz"}
       ],
-      "policies": [{ "id": "<bypass policy id>", "precedence": 1 }]
-    }
+      "app_launcher_visible": false,
+      "policies": [{"id": "<bypass policy id>", "precedence": 1}]
+    }'
     ```
 
-    If the API will not take two destinations on one app, create a second bypass app for `<hostname>/healthz`. The app still checks `API_TOKEN` on every `/api` call, so the bypass only removes the Access challenge. It does not open the API.
+    A destination path covers its subpaths, so `/api` also covers `/api/items`. When paths overlap, Access applies the more specific one, so this app wins over the board app on those two paths. The bypass only removes the Access challenge. OpenLoops still checks `API_TOKEN` on every `/api` call. Make sure the `aud` you saved in step 10 came from the board app, not this one.
 
-Write `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` into `.env`. Keep `INSECURE_ALLOW_UNPROTECTED` empty. Go to section 7.
+Write `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD` into `.env`. Keep `INSECURE_ALLOW_UNPROTECTED` empty. Run `unset CLOUDFLARE_API_TOKEN`. If you used the browser login, run `cf auth logout`. Go to section 7.
 
 ## 6B. Cloudflare, by hand
 
-Use this section if I would not give you a token, or if 6A stopped on a permission error. Send me these steps with my real hostname filled in, then wait. I paste back three values: the tunnel token (into the file you tell me, not the chat), the team domain, and the AUD tag.
+Use this section if I chose neither sign-in, or if 6A stopped on a permission error. Send me these steps with my real hostname filled in, then wait. I paste back three values: the tunnel token (into the file you tell me, not the chat), the team domain, and the AUD tag.
 
 1. Zero Trust dashboard → Networks → Tunnels → Create a tunnel → Cloudflared. Name it `openloops`. On the install screen, copy the token from the `docker run` command (the long string after `--token`). Put it on the server: `sudo nano /opt/openloops/.env`, line `TUNNEL_TOKEN=`.
 2. In the same tunnel, add a public hostname: `<hostname>`, service type `HTTP`, URL `openloops:4732`. Cloudflare creates the DNS record.
@@ -295,8 +346,8 @@ End with a short report:
 - Board URL and the deployed commit.
 - Paths: `/opt/openloops/compose.yml`, `.env`, `src/`, `set-webhook-url`, `GROKBOT_LINK_PROMPT.md`.
 - Which section 7 checks passed and any that failed.
-- Cloudflare objects you created, with ids: tunnel, DNS record, identity provider (if any), two policies, two or three Access applications.
-- What I still need to do: delete the Cloudflare setup token (and `/root/.cf-setup-token`), paste the linking prompt into the bot, run `set-webhook-url`.
+- Cloudflare objects you created, with ids: tunnel, DNS record, identity provider (if any), two policies, two Access applications.
+- What I still need to do: delete the Cloudflare setup token in the dashboard (you delete `/root/.cf-setup-token` yourself), paste the linking prompt into the bot, run `set-webhook-url`.
 - How to update later:
 
   ```bash
