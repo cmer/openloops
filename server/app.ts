@@ -2,6 +2,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { createAccessChecker, type AccessOptions } from "./access.js";
 import { bearerToken, safeEqual } from "./auth.js";
+import { handleFrom, normalizeBots, routeMessage, type Bot } from "./bots.js";
 import { assistantNameFrom } from "./names.js";
 import {
   ackOutbox,
@@ -11,6 +12,7 @@ import {
   getItem,
   getMeta,
   listBoardItems,
+  listBots,
   listUserEvents,
   listItemEvents,
   listItems,
@@ -18,6 +20,7 @@ import {
   patchItem,
   reconcile,
   recordUserMessage,
+  replaceBots,
   setMeta,
   upsertItems,
   type DB,
@@ -26,6 +29,7 @@ import { HttpError } from "./errors.js";
 import {
   parseAck,
   parseAction,
+  parseBots,
   parseClose,
   parseId,
   parseItemChanges,
@@ -66,6 +70,8 @@ export function createApp(opts: AppOptions): Hono {
   const webhookKey = opts.webhookKey ?? "";
   const assistantName = assistantNameFrom(opts.assistantName);
   const access = createAccessChecker(opts.access);
+  const primaryBot: Bot = { handle: handleFrom(assistantName) || "assistant", name: assistantName, description: null, primary: true };
+  const allBots = () => [primaryBot, ...listBots(opts.db)];
   const app = new Hono();
 
   app.use("*", async (c, next) => {
@@ -122,16 +128,20 @@ export function createApp(opts: AppOptions): Hono {
     return c.json({ ok: true, delivered, outbox_count: countOutbox(opts.db), item });
   });
 
+  app.get("/hq/bots", (c) => c.json({ bots: allBots() }));
+
   app.post("/hq/message", async (c) => {
     const now = clock();
-    const webhook = recordUserMessage(opts.db, parseMessage(await readBody(c)), now);
+    const parsed = parseMessage(await readBody(c));
+    const { bot, text } = routeMessage(allBots(), parsed.text, parsed.to);
+    const webhook = recordUserMessage(opts.db, text, now, bot.primary ? undefined : bot);
     const delivered = await deliverWebhook(opts.db, webhook, {
       url: opts.webhookUrl,
       key: webhookKey,
       fetchImpl,
       now,
     });
-    return c.json({ ok: true, delivered, outbox_count: countOutbox(opts.db) });
+    return c.json({ ok: true, delivered, outbox_count: countOutbox(opts.db), to: bot.handle });
   });
 
   const api = new Hono();
@@ -176,6 +186,14 @@ export function createApp(opts: AppOptions): Hono {
     const at = parseSync(await readBody(c), clock());
     setMeta(opts.db, "last_synced_at", at);
     return c.json({ last_synced_at: at });
+  });
+
+  api.get("/bots", (c) => c.json({ bots: allBots() }));
+
+  api.put("/bots", async (c) => {
+    const { bots, skipped } = normalizeBots(parseBots(await readBody(c)), primaryBot.handle);
+    replaceBots(opts.db, bots);
+    return c.json({ bots: allBots(), skipped });
   });
 
   api.get("/outbox", (c) => c.json({ events: listOutbox(opts.db) }));

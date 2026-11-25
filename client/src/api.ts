@@ -64,11 +64,11 @@ export async function postAct(id: number, type: ActionType, value?: string): Pro
   return (await res.json()) as ActResult;
 }
 
-export async function postMessage(text: string): Promise<MessageResult> {
+export async function postMessage(text: string, to?: string): Promise<MessageResult> {
   const res = await fetch("/hq/message", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, to }),
   });
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as MessageResult;

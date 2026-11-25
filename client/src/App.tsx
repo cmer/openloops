@@ -72,6 +72,10 @@ export function App() {
     async (silent: boolean) => {
       const gen = ++loadGen.current;
       if (!silent) setLoading(true);
+      // The assistant can rename or add bots at any time, so the list reloads with the board.
+      void getBots().then((list) => {
+        if (list) setRegistry(list);
+      });
       try {
         const next = await getBoard();
         if (gen !== loadGen.current || inflight.current > 0) return;
@@ -101,7 +105,6 @@ export function App() {
 
   useEffect(() => {
     void load(false);
-    void getBots().then(setRegistry);
     const interval = window.setInterval(() => void load(true), 60_000);
     const clock = window.setInterval(() => setNow(Date.now()), 60_000);
     const onVisible = () => {
@@ -197,9 +200,8 @@ export function App() {
     }
   }
 
-  async function sendMessage(text: string): Promise<{ delivered: boolean }> {
-    // Phase 1: the server only knows the assistant, so `to` isn't sent yet.
-    const result = await postMessage(text);
+  async function sendMessage(text: string, to: string): Promise<{ delivered: boolean }> {
+    const result = await postMessage(text, to);
     setBoard((current) => (current ? { ...current, outbox_count: result.outbox_count } : current));
     return result;
   }

@@ -60,7 +60,7 @@ The body looks like this:
 - `reply` — `value` is my reply. Read it and continue the work. The card stays open until you close it.
 - `choose` — I picked a decision. `value` is the option's `value` (not the label). Do that thing. The card is already done.
 - `move` — I dragged it to another section. `value` is the new section. Treat that as a correction of your filing.
-- `message` — I pinged you from the box at the top of the board. `item_id`, `external_key`, and `title` are null. `value` is the text. Respond to it as a fresh note from me.
+- `message` — I wrote to you from the message box at the top of the board. `item_id`, `external_key`, and `title` are null. `value` is the text. Respond to it as a fresh note from me. If the body also has `to` and `to_name`, I tagged one of your other bots with `@` (see section 5): `to` is its handle and `to_name` its name, and the tag is already stripped from `value`. Pass `value` on to that bot instead of acting on it yourself, then remember that you relayed it. Without `to`, the message is for you, even when it starts with an `@word`.
 
 If the delivery is a type you do not know, store the body in memory and tell me, and do not guess.
 
@@ -87,11 +87,37 @@ Each run:
 4. Close cards whose real-world loop is finished: `POST {URL}/api/items/{id}/close` with `{"status":"done"}` or `{"status":"dropped","note":"..."}`. Closing by id is how a resolved loop leaves the board. Do not delete rows. There is no delete API.
 5. Catch up anything the webhook missed: `GET {URL}/api/events?since={cursor}`. The cursor is exclusive. Only my actions are in this list (`actor` is `user`). Store the cursor in memory after you have acted on the page.
 6. Drain leftovers: `GET {URL}/api/outbox`, act on each payload the same way as a webhook delivery, then `POST {URL}/api/outbox/ack` with `{"ids":[...]}` for the ones you handled. Ack only ids you successfully handled.
-7. `POST {URL}/api/sync/complete` with `{}` or `{"at":"<ISO time>"}`. That sets the "last synced" line in the header.
+7. If your list of other bots changed since the last run, publish it again (section 5).
+8. `POST {URL}/api/sync/complete` with `{}` or `{"at":"<ISO time>"}`. That sets the "last synced" line in the sidebar.
 
 Keep the token out of the routine's visible prompt. Refer to the secret by name.
 
-## 5. How to write cards
+## 5. Publish your other bots
+
+Skip this section if you do not work with other bots.
+
+The message box on the board lets me tag a bot with `@`. The list it offers is the one you publish. Messages to any of those bots still come to your webhook, with `to` set, and you relay them (section 2).
+
+Publish the list once now, and again whenever a bot is added, removed, or renamed:
+
+```http
+PUT {URL}/api/bots
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{"bots":[{"name":"Email Bot","description":"Drafts email replies"},{"name":"Calendar Helper"}]}
+```
+
+- Send the whole list every time. It replaces the previous one. `{"bots":[]}` removes them all.
+- Do not include yourself. You are always first in the list, under your own name.
+- `name` is required, at most 60 characters. `description` is optional, at most 200, and shows next to the name.
+- The board makes each tag from the name: lowercased, accents removed, spaces and punctuation turned into underscores. `Email Bot` becomes `@email_bot`.
+- If a tag should stay the same when a bot's name changes, add `handle`: lowercase letters, digits, `_` or `-`, at most 32 characters.
+- At most 50 bots.
+
+The response lists every bot with its final `handle`. Remember those handles, because `to` in a message uses them. `GET {URL}/api/bots` returns the current list.
+
+## 6. How to write cards
 
 Sections, in board order:
 
@@ -124,7 +150,9 @@ Status values are `open`, `done`, `dropped`, and `snoozed`. Snoozed cards hide u
 
 Other limits: 200 items per upsert, `external_key` 200 characters, option label and value 120 characters, a reply or close note 4,000 characters.
 
-## 6. Check that it works
+The board shows each card's `id` as a number, like `#138`. When I write "re #138" in a message, I mean the card with id 138.
+
+## 7. Check that it works
 
 Do these and tell me the result of each. Do not print the token or the webhook key.
 
@@ -133,7 +161,8 @@ Do these and tell me the result of each. Do not print the token or the webhook k
 - [ ] Upsert one sample card with external key `setup:check`, section `action`, title `Confirm OpenLoops is connected`. I can see it on the board.
 - [ ] I mark that card done, or you close it with the API if I ask you to. It leaves the open lists.
 - [ ] I take one action on the board (done, snooze, drop, reply, a decision, or a drag). Your webhook routine receives it, or, if the webhook URL is not set yet, the event is in `GET /api/outbox` and your sync routine acks it.
-- [ ] `POST /api/sync/complete` runs, and the header can show a sync time.
+- [ ] `POST /api/sync/complete` runs, and the sidebar can show a sync time.
+- [ ] If you work with other bots: `PUT /api/bots` returns each bot's handle, I can pick one after typing `@` on the board, and a tagged message reaches you with `to` set and you relay it.
 - [ ] The token and the webhook key are only in the secrets store. They are not in memory, the routine text, or this chat.
 - [ ] The name on the board matches `ASSISTANT_NAME` on the server (the default is Assistant). You did not hardcode a person's name into cards.
 

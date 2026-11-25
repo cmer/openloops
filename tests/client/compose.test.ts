@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fallbackBots, parseMessage, type Bot } from "../../client/src/compose";
+import { fallbackBots, matchBots, parseMessage, type Bot } from "../../client/src/compose";
 
 const bots: Bot[] = [
   { handle: "walter", name: "Walter", primary: true },
@@ -34,5 +34,18 @@ describe("fallbackBots", () => {
     expect(fallbackBots("Walter")).toEqual([{ handle: "walter", name: "Walter", primary: true }]);
     expect(fallbackBots("Dr. Who 2")).toEqual([{ handle: "drwho2", name: "Dr. Who 2", primary: true }]);
     expect(fallbackBots("!!!")[0]?.handle).toBe("assistant");
+  });
+});
+
+describe("matchBots", () => {
+  const list: Bot[] = [
+    { handle: "walter", name: "Walter", primary: true },
+    { handle: "mail", name: "Email Bot" },
+  ];
+  it("matches the handle or the name", () => {
+    expect(matchBots(list, "").map((bot) => bot.handle)).toEqual(["walter", "mail"]);
+    expect(matchBots(list, "ma").map((bot) => bot.handle)).toEqual(["mail"]);
+    expect(matchBots(list, "Email_b").map((bot) => bot.handle)).toEqual(["mail"]);
+    expect(matchBots(list, "x")).toEqual([]);
   });
 });

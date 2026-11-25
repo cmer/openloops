@@ -1,3 +1,4 @@
+import { MAX_BOTS, isHandle, type BotInput } from "./bots.js";
 import {
   isUserAction,
   isSection,
@@ -233,11 +234,27 @@ export function parseAction(input: unknown, now: Date): ParsedAction {
   return { type: "snooze", until };
 }
 
-export function parseMessage(input: unknown): string {
+export function parseMessage(input: unknown): { text: string; to?: string } {
   if (!isRecord(input)) throw new HttpError(400, "Body must be an object");
   const text = cleanText(input.text, "text", 4_000, true);
   if (!text) throw new HttpError(400, "text is required");
-  return text;
+  if (input.to === undefined || input.to === null || input.to === "") return { text };
+  if (typeof input.to !== "string" || !/^@?[A-Za-z0-9_-]{1,32}$/.test(input.to)) {
+    throw new HttpError(400, "to must be a bot handle");
+  }
+  return { text, to: input.to };
+}
+
+export function parseBots(input: unknown): BotInput[] {
+  if (!isRecord(input) || !Array.isArray(input.bots)) throw new HttpError(400, "bots must be an array");
+  if (input.bots.length > MAX_BOTS) throw new HttpError(400, `At most ${MAX_BOTS} bots`);
+  return input.bots.map((entry, index) => {
+    if (!isRecord(entry)) throw new HttpError(400, `bots[${index}] must be an object`);
+    const name = cleanText(entry.name, `bots[${index}].name`, 60, true)!;
+    const handle = cleanText(entry.handle, `bots[${index}].handle`, 32, false)?.toLowerCase() ?? null;
+    if (handle && !isHandle(handle)) throw new HttpError(400, `bots[${index}].handle must be lowercase letters, digits, _ or -`);
+    return { name, handle, description: cleanText(entry.description, `bots[${index}].description`, 200, false) };
+  });
 }
 
 export function parseAck(input: unknown): number[] {
