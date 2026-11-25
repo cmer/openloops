@@ -1,74 +1,46 @@
-@import "tailwindcss";
-@import "@fontsource/instrument-sans/400.css";
-@import "@fontsource/instrument-sans/500.css";
-@import "@fontsource/instrument-sans/600.css";
-@import "@fontsource/instrument-serif/400.css";
+/* Tailwind without its preflight reset: the OpenLoops stylesheets were tuned without one
+   (content-box sizing, default margins), so preflight would shift their spacing. */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
+@import "./openloops-base.css";
+@import "./openloops-standard.css";
 
-@theme {
-  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Instrument Serif", ui-serif, Georgia, serif;
-  --color-paper: #e7e1d4;
-  --color-card: #f7f4ee;
-  --color-ink: #221c16;
-  --color-muted: #4f493f;
-  --color-line: #d4ccbe;
-  --color-pine: #1d5c45;
-  --color-pine-soft: #e4f0ea;
-  --color-rust: #8c3b1e;
-  --color-rust-soft: #f6e4d8;
-  --color-brass: #6a4510;
-  --color-brass-soft: #f4ead2;
-  --color-night: #241c16;
+/* Map OpenLoops tokens into Tailwind 4 so utilities (bg-sheet, text-ink-2, font-cond…) work. */
+@theme inline {
+  --color-page: var(--ol-page);
+  --color-sheet: var(--ol-sheet);
+  --color-gutter: var(--ol-gutter);
+  --color-raise: var(--ol-raise);
+  --color-ink: var(--ol-ink);
+  --color-ink-2: var(--ol-ink-2);
+  --color-ink-3: var(--ol-ink-3);
+  --color-rule: var(--ol-rule);
+  --color-rule-strong: var(--ol-rule-strong);
+  --color-control: var(--ol-control);
+  --color-accent: var(--ol-accent);
+  --color-accent-wash: var(--ol-accent-wash);
+  --color-overdue: var(--ol-overdue);
+  --color-overdue-wash: var(--ol-overdue-wash);
+  --color-old: var(--ol-old);
+  --color-old-wash: var(--ol-old-wash);
+  --color-done: var(--ol-done);
+  --color-done-wash: var(--ol-done-wash);
+  --color-warn: var(--ol-warn);
+  --color-warn-wash: var(--ol-warn-wash);
+
+  --font-sans: var(--ol-font-sans);
+  --font-cond: var(--ol-font-cond);
+  --font-mono: var(--ol-font-mono);
+
+  --radius-sm: var(--ol-radius);
+  --radius-md: var(--ol-radius-lg);
 }
 
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-}
-
-button,
-input,
-textarea {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-
-:focus-visible {
-  outline: 2px solid var(--color-pine);
-  outline-offset: 2px;
-}
-
-.privacy .sensitive {
-  filter: blur(8px);
-  user-select: none;
-}
-
-.note p + p {
-  margin-top: 0.75rem;
-}
-
-.note ul {
-  margin: 0.5rem 0 0;
-  padding-left: 1.15rem;
-  list-style: disc;
-}
-
-.note li + li {
-  margin-top: 0.25rem;
-}
-
-.note a {
-  color: var(--color-pine);
-  text-underline-offset: 2px;
-}
+html, body { margin: 0; background: var(--ol-page); }

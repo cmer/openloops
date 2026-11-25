@@ -1,0 +1,17 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "client/src/openloops-base.css"
+        ],
+        "createdAt": "2026-11-25T16:50:05.259Z",
+        "reason": "Approved handoff design: the user's brief says to copy openloops-base.css as is; the only side border is the Kanban overdue marker, paired with 'Overdue · date' text"
+      }
+    ]
+  }
+}

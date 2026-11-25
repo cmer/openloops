@@ -1,5 +1,5 @@
 {
-  "name": "open-loops",
+  "name": "openloops",
   "private": true,
   "type": "module",
   "scripts": {
@@ -16,8 +16,8 @@
     "hono": "^4.10.4"
   },
   "devDependencies": {
-    "@fontsource/instrument-sans": "^5.2.8",
-    "@fontsource/instrument-serif": "^5.2.8",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@tailwindcss/vite": "^4.1.17",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.19.1",

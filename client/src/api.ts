@@ -1,4 +1,5 @@
 import type { Item } from "../../shared/types";
+import type { Bot } from "./compose";
 
 export type Board = {
   generated_at: string;
@@ -71,4 +72,22 @@ export async function postMessage(text: string): Promise<MessageResult> {
   });
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as MessageResult;
+}
+
+/** GET /hq/bots. Null when the server doesn't have a bot registry yet (404 or a network error). */
+export async function getBots(): Promise<Bot[] | null> {
+  try {
+    const res = await fetch("/hq/bots");
+    if (!res.ok) return null;
+    const data = (await res.json()) as { bots?: unknown } | unknown[];
+    const list = Array.isArray(data) ? data : (data as { bots?: unknown }).bots;
+    if (!Array.isArray(list)) return null;
+    const bots = list.filter(
+      (bot): bot is Bot =>
+        typeof bot === "object" && bot !== null && typeof (bot as Bot).handle === "string" && typeof (bot as Bot).name === "string",
+    );
+    return bots.length > 0 ? bots : null;
+  } catch {
+    return null;
+  }
 }

@@ -1,14 +1,20 @@
 import type { Section } from "../../shared/types";
 
-export const BOARD_SECTIONS: { id: Section; title: string }[] = [
-  { id: "decision", title: "Needs your decision" },
-  { id: "action", title: "Needs your action" },
-  { id: "question_for_you", title: "Questions waiting on you" },
-  { id: "question_from_you", title: "Your questions still open" },
-  { id: "stalled", title: "Stalled" },
-  { id: "waiting_on_others", title: "Waiting on others" },
-  { id: "done", title: "Recently done" },
-];
+export type SectionFilter = "all" | Section;
+
+export const SECTION_LABEL: Record<Section, string> = {
+  decision: "Needs your decision",
+  action: "Needs your action",
+  question_for_you: "Questions waiting on you",
+  question_from_you: "Your questions still open",
+  stalled: "Stalled",
+  waiting_on_others: "Waiting on others",
+  done: "Recently done",
+};
+
+export const BOARD_SECTIONS: { id: Section; title: string }[] = (
+  ["decision", "action", "question_for_you", "question_from_you", "stalled", "waiting_on_others", "done"] as const
+).map((id) => ({ id, title: SECTION_LABEL[id] }));
 
 export function sectionHint(id: Section, assistantName: string): string {
   switch (id) {
@@ -29,22 +35,6 @@ export function sectionHint(id: Section, assistantName: string): string {
   }
 }
 
-export const SECTION_LABEL: Record<Section, string> = {
-  decision: "Needs your decision",
-  action: "Needs your action",
-  question_for_you: "Questions waiting on you",
-  question_from_you: "Your questions still open",
-  stalled: "Stalled",
-  waiting_on_others: "Waiting on others",
-  done: "Recently done",
-};
-
-export const SECTION_CHIP: Record<Section, [string, string]> = {
-  decision: ["decision", "decisions"],
-  action: ["action", "actions"],
-  question_for_you: ["question for you", "questions for you"],
-  question_from_you: ["question you asked", "questions you asked"],
-  stalled: ["stalled", "stalled"],
-  waiting_on_others: ["waiting", "waiting"],
-  done: ["done", "done"],
-};
+export function isSectionFilter(value: string | null): value is SectionFilter {
+  return value === "all" || BOARD_SECTIONS.some((section) => section.id === value);
+}

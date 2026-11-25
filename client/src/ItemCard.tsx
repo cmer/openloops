@@ -1,249 +1,267 @@
-import { useState } from "react";
-import type { FormEvent, MouseEvent } from "react";
+import { useId, useState, type FormEvent, type MouseEvent, type RefObject } from "react";
 import type { Item } from "../../shared/types";
 import type { ActionType } from "./api";
 import { Markdown } from "./markdown";
-import { SECTION_LABEL } from "./sections";
-import { ageDays, ageLabel, customSnooze, formatDay, snoozeChoices, tomorrowInputValue } from "./time";
+import { Age, Btn, Gutter, HostLink, WasFlag, choiceLabel } from "./primitives";
+import { customSnooze, snoozeChoices, tomorrowInputValue } from "./time";
 
-const button =
-  "inline-flex min-h-11 items-center justify-center rounded-full border border-line bg-card px-3.5 text-sm font-medium text-ink hover:bg-white";
-const primary =
-  "inline-flex min-h-11 items-center justify-center rounded-full bg-pine px-3.5 text-sm font-medium text-white hover:bg-pine/90";
-const quiet = "inline-flex min-h-11 items-center justify-center rounded-full px-3 text-sm font-medium text-muted hover:text-ink";
-const danger =
-  "inline-flex min-h-11 items-center justify-center rounded-full bg-rust-soft px-3.5 text-sm font-medium text-rust";
+export type OnAct = (type: ActionType, value?: string) => void;
+
+/* ---------- panels, shared with ItemModal ---------- */
+
+export function SnoozePanel({ now, busy, onAct }: { now: number; busy: boolean; onAct: OnAct }) {
+  const id = useId();
+  const [date, setDate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const until = customSnooze(date, now);
+    if (!until) {
+      setError("Pick a future day.");
+      return;
+    }
+    onAct("snooze", until);
+  }
+
+  return (
+    <div className="ol-panel" role="group" aria-label="Snooze">
+      <div className="ol-panel-row">
+        {snoozeChoices(new Date(now)).map((choice) => (
+          <Btn key={choice.id} className="ol-snooze-preset" disabled={busy} onClick={() => onAct("snooze", choice.at)}>
+            {choice.label}
+            <small>{choice.detail}</small>
+          </Btn>
+        ))}
+      </div>
+      {/* noValidate: `min` greys out past days in the picker, but a typed past date should get our message. */}
+      <form className="ol-panel-row" onSubmit={submit} noValidate>
+        <label className="ol-sr" htmlFor={id}>
+          Snooze until date
+        </label>
+        <input
+          id={id}
+          type="date"
+          className="ol-input"
+          style={{ width: "auto" }}
+          min={tomorrowInputValue(new Date(now))}
+          value={date}
+          onChange={(event) => {
+            setDate(event.target.value);
+            setError(null);
+          }}
+        />
+        <Btn type="submit" disabled={busy}>
+          Snooze until date
+        </Btn>
+      </form>
+      {error && (
+        <p className="ol-panel-error" role="alert">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function ReplyPanel({
+  busy,
+  onAct,
+  onCancel,
+  inputRef,
+}: {
+  busy: boolean;
+  onAct: OnAct;
+  onCancel: () => void;
+  inputRef?: RefObject<HTMLTextAreaElement | null>;
+}) {
+  const id = useId();
+  const [text, setText] = useState("");
+
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    const reply = text.trim();
+    if (reply) onAct("reply", reply);
+  }
+
+  return (
+    <form className="ol-panel" onSubmit={submit}>
+      <label className="ol-sr" htmlFor={id}>
+        Reply
+      </label>
+      <textarea
+        id={id}
+        ref={inputRef}
+        autoFocus
+        className="ol-textarea sensitive"
+        placeholder="Write the answer"
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+      />
+      <div className="ol-panel-row">
+        <Btn variant="primary" type="submit" disabled={busy || !text.trim()}>
+          Send reply
+        </Btn>
+        <Btn variant="quiet" onClick={onCancel}>
+          Cancel
+        </Btn>
+      </div>
+    </form>
+  );
+}
+
+/** The confirm sits in its own panel, away from where Drop was tapped. Keep it is on the left. */
+export function DropConfirm({ busy, onAct, onCancel }: { busy: boolean; onAct: OnAct; onCancel: () => void }) {
+  return (
+    <div className="ol-panel" role="group" aria-label="Confirm drop">
+      <span>Drop this loop? It won't appear in Recently done.</span>
+      <div className="ol-panel-row">
+        <Btn size="sm" onClick={onCancel}>
+          Keep it
+        </Btn>
+        <span style={{ flex: 1 }} />
+        <Btn size="sm" variant="armed" disabled={busy} onClick={() => onAct("drop")}>
+          Confirm drop
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+export function OptionButtons({ item, busy, onAct }: { item: Item; busy: boolean; onAct: OnAct }) {
+  if (item.status !== "open" || !item.options?.length) return null;
+  return (
+    <div className="ol-options" role="group" aria-label="Options">
+      {item.options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          className="ol-option sensitive"
+          disabled={busy}
+          onClick={() => onAct("choose", option.value)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/* ---------- list entry ---------- */
+
+const INTERACTIVE = "a, button, input, textarea, select, label, form";
 
 export function ItemCard({
   item,
   now,
   pending,
-  onAct,
+  busy,
   onOpen,
+  onAct,
 }: {
   item: Item;
   now: number;
+  /** This card's action is in flight. */
   pending: boolean;
-  onAct: (item: Item, type: ActionType, value?: string) => void;
+  /** Any action is in flight. Actions are serialized. */
+  busy: boolean;
   onOpen: (item: Item) => void;
+  onAct: (item: Item, type: ActionType, value?: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const [panel, setPanel] = useState<"snooze" | "reply" | "drop" | null>(null);
-  const [reply, setReply] = useState("");
-  const [date, setDate] = useState("");
-  const [dateError, setDateError] = useState<string | null>(null);
-  const days = ageDays(item.created_at, now);
-  const old = days > 7;
-  const overdue = Boolean(item.due_at && item.status === "open" && Date.parse(item.due_at) < now);
-  const choiceLabel = item.choice
-    ? (item.options?.find((option) => option.value === item.choice)?.label ?? item.choice)
-    : null;
-  const host = item.link ? safeHost(item.link) : null;
-
-  function toggle(next: "snooze" | "reply" | "drop") {
-    setPanel((current) => (current === next ? null : next));
-    setDateError(null);
-  }
-
-  function submitReply(event: FormEvent) {
-    event.preventDefault();
-    const text = reply.trim();
-    if (!text) return;
-    onAct(item, "reply", text);
-    setReply("");
+  const [panel, setPanel] = useState<null | "snooze" | "reply" | "drop">(null);
+  const [expanded, setExpanded] = useState(false);
+  const open = item.status === "open";
+  const toggle = (next: "snooze" | "reply" | "drop") => setPanel((current) => (current === next ? null : next));
+  const act: OnAct = (type, value) => {
     setPanel(null);
-  }
+    onAct(item, type, value);
+  };
 
-  function submitDate(event: FormEvent) {
-    event.preventDefault();
-    const until = customSnooze(date, now);
-    if (!until) {
-      setDateError("Pick a future day.");
-      return;
-    }
-    onAct(item, "snooze", until);
-    setPanel(null);
-  }
-
-  function openFromCard(event: MouseEvent<HTMLElement>) {
+  function rowClick(event: MouseEvent<HTMLElement>) {
     const target = event.target;
-    if (!(target instanceof HTMLElement)) return;
-    if (target.closest("button, a, input, textarea, form")) return;
+    if (target instanceof Element && target.closest(INTERACTIVE)) return;
     onOpen(item);
   }
 
+  const details = item.body ? (
+    <Btn size="sm" variant="quiet" aria-expanded={expanded} onClick={() => setExpanded((current) => !current)}>
+      {expanded ? "Hide" : "Details"}
+    </Btn>
+  ) : null;
+
   return (
-    <article
-      className={`cursor-pointer rounded-2xl border bg-card px-4 py-4 ${old ? "border-rust/40" : "border-line"}`}
-      onClick={openFromCard}
-    >
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        {item.source && (
-          <span className="rounded-full bg-pine-soft px-2.5 py-1 font-medium text-pine">{item.source}</span>
+    <article className={`ol-entry${item.status === "done" ? " is-done" : ""}`} onClick={rowClick}>
+      <Gutter item={item} now={now} />
+      <div className="ol-body">
+        <div className="ol-topline">
+          <span className="ol-src">{item.source}</span>
+          <Age item={item} now={now} />
+        </div>
+        <h3 className="ol-title">
+          <button type="button" className="ol-title-btn sensitive" onClick={() => onOpen(item)}>
+            {item.title}
+          </button>
+        </h3>
+        <WasFlag item={item} />
+        {(item.owner || item.link) && (
+          <div className="ol-facts-line">
+            {item.owner && (
+              <span>
+                <span className="k">Who</span>
+                <span className="sensitive">{item.owner}</span>
+              </span>
+            )}
+            {item.link && (
+              <span>
+                <span className="k">Link</span>
+                <HostLink url={item.link} />
+              </span>
+            )}
+          </div>
         )}
-        <span className={old ? "rounded-full bg-rust-soft px-2.5 py-1 font-medium text-rust" : "text-muted"}>
-          {ageLabel(days)}
-        </span>
-        {item.due_at && (
-          <span className={overdue ? "font-medium text-rust" : "text-muted"}>
-            {overdue ? "Overdue" : "Due"} {formatDay(item.due_at)}
-          </span>
+        {item.choice && (
+          <p className="ol-quote ol-quote--chose">
+            <span className="k">Chose</span>
+            <span className="sensitive">{choiceLabel(item)}</span>
+          </p>
         )}
-        {item.status === "done" && item.closed_at && (
-          <span className="text-muted">Closed {formatDay(item.closed_at)}</span>
+        {item.last_reply && (
+          <p className="ol-quote">
+            <span className="k">You replied</span>
+            <span className="sensitive">{item.last_reply}</span>
+          </p>
         )}
-        {item.owner && <span className="sensitive text-muted">Who: {item.owner}</span>}
+        {expanded && item.body && <Markdown text={item.body} />}
+
+        <OptionButtons item={item} busy={busy} onAct={act} />
+
+        {open ? (
+          <div className="ol-actions">
+            <Btn variant="primary" size="sm" pending={pending} disabled={busy} onClick={() => act("done")}>
+              {pending ? "Saving…" : "Done"}
+            </Btn>
+            <Btn size="sm" disabled={busy} aria-expanded={panel === "snooze"} onClick={() => toggle("snooze")}>
+              Snooze
+            </Btn>
+            <Btn size="sm" disabled={busy} aria-expanded={panel === "reply"} onClick={() => toggle("reply")}>
+              Reply
+            </Btn>
+            {details}
+            <span className="ol-spacer" />
+            {panel !== "drop" && (
+              <Btn size="sm" variant="drop" disabled={busy} onClick={() => toggle("drop")}>
+                Drop
+              </Btn>
+            )}
+          </div>
+        ) : details ? (
+          <div className="ol-actions">{details}</div>
+        ) : null}
+
+        {open && panel === "snooze" && <SnoozePanel now={now} busy={busy} onAct={act} />}
+        {open && panel === "reply" && <ReplyPanel busy={busy} onAct={act} onCancel={() => setPanel(null)} />}
+        {open && panel === "drop" && <DropConfirm busy={busy} onAct={act} onCancel={() => setPanel(null)} />}
       </div>
-
-      <h3 className="mt-2.5 font-serif text-[1.45rem] leading-snug">
-        <button type="button" className="sensitive text-left text-ink" onClick={() => onOpen(item)}>
-          {item.title}
-        </button>
-      </h3>
-
-      {item.section === "stalled" && item.original_section && (
-        <p className="mt-1 text-xs text-muted">Was: {SECTION_LABEL[item.original_section]}</p>
-      )}
-      {host && item.link && (
-        <a className="mt-1 inline-block text-sm text-pine underline" href={item.link} target="_blank" rel="noreferrer">
-          {host}
-        </a>
-      )}
-      {choiceLabel && <p className="sensitive mt-2 text-sm text-ink">Chose {choiceLabel}</p>}
-      {item.last_reply && <p className="sensitive mt-2 text-sm leading-relaxed text-ink">You replied: {item.last_reply}</p>}
-
-      {open && item.body && (
-        <div className="sensitive mt-3">
-          <Markdown text={item.body} />
-        </div>
-      )}
-
-      {item.status === "open" && item.options && item.options.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {item.options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={primary}
-              disabled={pending}
-              onClick={() => onAct(item, "choose", option.value)}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {item.status === "open" && (
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" className={button} disabled={pending} onClick={() => onAct(item, "done")}>
-            Done
-          </button>
-          <button type="button" className={button} disabled={pending} onClick={() => toggle("snooze")}>
-            Snooze
-          </button>
-          <button type="button" className={button} disabled={pending} onClick={() => toggle("reply")}>
-            Reply
-          </button>
-          {item.body && (
-            <button type="button" className={quiet} onClick={() => setOpen((current) => !current)}>
-              {open ? "Hide" : "Details"}
-            </button>
-          )}
-          {panel === "drop" ? (
-            <>
-              <button type="button" className={danger} disabled={pending} onClick={() => onAct(item, "drop")}>
-                Confirm drop
-              </button>
-              <button type="button" className={quiet} onClick={() => setPanel(null)}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button type="button" className={quiet} disabled={pending} onClick={() => toggle("drop")}>
-              Drop
-            </button>
-          )}
-        </div>
-      )}
-
-      {item.status !== "open" && item.body && (
-        <button type="button" className={`${quiet} mt-2 px-0`} onClick={() => setOpen((current) => !current)}>
-          {open ? "Hide" : "Details"}
-        </button>
-      )}
-
-      {panel === "snooze" && item.status === "open" && (
-        <div className="mt-3 rounded-xl bg-paper px-3 py-3">
-          <p className="text-xs font-medium tracking-wide text-muted uppercase">Snooze until</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {snoozeChoices(new Date(now)).map((choice) => (
-              <button
-                key={choice.id}
-                type="button"
-                className={button}
-                disabled={pending}
-                onClick={() => onAct(item, "snooze", choice.at)}
-              >
-                {choice.label}
-                <span className="ml-1.5 text-muted">{choice.detail}</span>
-              </button>
-            ))}
-          </div>
-          <form className="mt-3 flex flex-col gap-2 sm:flex-row" onSubmit={submitDate}>
-            <label className="sr-only" htmlFor={`snooze-${item.id}`}>
-              Custom snooze date
-            </label>
-            <input
-              id={`snooze-${item.id}`}
-              type="date"
-              min={tomorrowInputValue(new Date(now))}
-              value={date}
-              onChange={(event) => {
-                setDate(event.target.value);
-                setDateError(null);
-              }}
-              className="min-h-11 rounded-xl border border-line bg-white px-3 text-base"
-            />
-            <button type="submit" className={primary} disabled={pending}>
-              Snooze until date
-            </button>
-          </form>
-          {dateError && <p className="mt-2 text-sm text-rust">{dateError}</p>}
-        </div>
-      )}
-
-      {panel === "reply" && item.status === "open" && (
-        <form className="mt-3" onSubmit={submitReply}>
-          <label className="sr-only" htmlFor={`reply-${item.id}`}>
-            Reply
-          </label>
-          <textarea
-            id={`reply-${item.id}`}
-            value={reply}
-            onChange={(event) => setReply(event.target.value)}
-            rows={3}
-            placeholder="Write the answer"
-            className="sensitive w-full resize-y rounded-xl border border-line bg-white px-3 py-2 text-base leading-relaxed"
-          />
-          <div className="mt-2 flex gap-2">
-            <button type="submit" className={primary} disabled={pending || !reply.trim()}>
-              Send reply
-            </button>
-            <button type="button" className={quiet} onClick={() => setPanel(null)}>
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
     </article>
   );
-}
-
-function safeHost(link: string): string {
-  try {
-    return new URL(link).host;
-  } catch {
-    return "Link";
-  }
 }
