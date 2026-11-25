@@ -46,10 +46,10 @@ export function App() {
   const [now, setNow] = useState(() => Date.now());
   const [pendingId, setPendingId] = useState<number | null>(null);
   const [registry, setRegistry] = useState<Bot[] | null>(null);
-  const [blur, setBlur] = useState(() => readStored("open-loops-blur") === "1");
-  const [view, setView] = useState<BoardView>(() => (readStored("open-loops-view") === "kanban" ? "kanban" : "list"));
+  const [blur, setBlur] = useState(() => readStored("openloops-blur") === "1");
+  const [view, setView] = useState<BoardView>(() => (readStored("openloops-view") === "kanban" ? "kanban" : "list"));
   const [filter, setFilter] = useState<SectionFilter>(() => {
-    const stored = readStored("open-loops-filter");
+    const stored = readStored("openloops-filter");
     return isSectionFilter(stored) ? stored : "all";
   });
   const [theme, setTheme] = useTheme();
@@ -121,13 +121,13 @@ export function App() {
 
   function chooseView(next: BoardView) {
     setView(next);
-    store("open-loops-view", next);
+    store("openloops-view", next);
   }
 
   function toggleBlur() {
     setBlur((current) => {
       const next = !current;
-      store("open-loops-blur", next ? "1" : "0");
+      store("openloops-blur", next ? "1" : "0");
       return next;
     });
   }
@@ -139,7 +139,7 @@ export function App() {
       return;
     }
     setFilter(next);
-    store("open-loops-filter", next);
+    store("openloops-filter", next);
     document.querySelector(".ol-content")?.scrollIntoView({ block: "start" });
   }
 

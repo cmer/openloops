@@ -8,14 +8,14 @@
 # skipped, even if the insecure switch is left on.
 
 services:
-  open-loops:
+  openloops:
     build: .
     ports:
       - "4732:4732"
     environment:
       PORT: "4732"
       NODE_ENV: production
-      DATABASE_PATH: /data/open-loops.db
+      DATABASE_PATH: /data/openloops.db
       ASSISTANT_NAME: ${ASSISTANT_NAME:-Assistant}
       API_TOKEN: ${API_TOKEN:-}
       WEBHOOK_URL: ${WEBHOOK_URL:-}
@@ -24,7 +24,7 @@ services:
       CF_ACCESS_AUD: ${CF_ACCESS_AUD:-}
       INSECURE_ALLOW_UNPROTECTED: ${INSECURE_ALLOW_UNPROTECTED:-1}
     volumes:
-      - open-loops-data:/data
+      - openloops-data:/data
     restart: unless-stopped
     healthcheck:
       test:
@@ -40,4 +40,4 @@ services:
       retries: 3
 
 volumes:
-  open-loops-data:
+  openloops-data:

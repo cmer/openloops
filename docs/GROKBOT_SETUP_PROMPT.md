@@ -13,9 +13,9 @@ Do this in order. Do not skip the questions. Do not invent a URL or a token.
 Ask me for two things, one at a time:
 
 1. The base URL of my OpenLoops instance. It should look like `https://loops.example.com`, with an `https` scheme, no path, no query, and no credentials. Repeat the URL back and wait until I confirm it.
-2. The API token. Tell me to paste it once. Store it in your secrets store under the name `OPEN_LOOPS_API_TOKEN`. Never echo the token, never write it into memory, a routine prompt, a file in the chat, or a command line that would show up in a transcript. After it is stored, tell me to rotate it if it has already appeared in this chat, and do not repeat it while saying so.
+2. The API token. Tell me to paste it once. Store it in your secrets store under the name `OPENLOOPS_API_TOKEN`. Never echo the token, never write it into memory, a routine prompt, a file in the chat, or a command line that would show up in a transcript. After it is stored, tell me to rotate it if it has already appeared in this chat, and do not repeat it while saying so.
 
-If I only give you a token and no URL, stop and ask for the URL. If the URL does not parse, ask again. Remember the confirmed URL in memory. Remember that the token lives in the secret `OPEN_LOOPS_API_TOKEN` and nowhere else.
+If I only give you a token and no URL, stop and ask for the URL. If the URL does not parse, ask again. Remember the confirmed URL in memory. Remember that the token lives in the secret `OPENLOOPS_API_TOKEN` and nowhere else.
 
 Check the instance before you build routines:
 
@@ -29,13 +29,13 @@ If the authed call fails, stop and tell me. Do not guess a different token.
 
 Create a webhook-triggered routine that receives what I do on the board.
 
-Generate a long random webhook key (32 bytes, hex is fine). Store it in your secrets store as `OPEN_LOOPS_WEBHOOK_KEY`. Never echo it.
+Generate a long random webhook key (32 bytes, hex is fine). Store it in your secrets store as `OPENLOOPS_WEBHOOK_KEY`. Never echo it.
 
 The routine's trigger is an incoming HTTP webhook. Note the URL the routine gives you. That URL is not a secret. The key is.
 
 On every delivery:
 
-1. Read `Authorization` and `X-Automation-Key`. Accept the request only when at least one of them equals `OPEN_LOOPS_WEBHOOK_KEY`. Compare in constant time if you can. If neither matches, ignore the body and do not act.
+1. Read `Authorization` and `X-Automation-Key`. Accept the request only when at least one of them equals `OPENLOOPS_WEBHOOK_KEY`. Compare in constant time if you can. If neither matches, ignore the body and do not act.
 2. Parse the JSON body. Do not log the headers.
 3. Act on `type`, then remember what you did so a retry does not do it twice. Use `item_id` plus `at` as the idempotency key.
 
@@ -69,7 +69,7 @@ If the delivery is a type you do not know, store the body in memory and tell me,
 OpenLoops reads the webhook from its own environment, not from an API call:
 
 - `WEBHOOK_URL` = the routine's webhook URL
-- `WEBHOOK_KEY` = `OPEN_LOOPS_WEBHOOK_KEY`
+- `WEBHOOK_KEY` = `OPENLOOPS_WEBHOOK_KEY`
 
 You cannot set those through `/api`. Ask me to set them and restart the container. If I give you a shell on that host, show me the exact edit and the restart command and wait for me to say yes before you run it. Do not print the key in the command. Pass it from the secret store into the environment without echoing it.
 
@@ -81,7 +81,7 @@ Create a second routine on a schedule. Suggest every 30 minutes while I am likel
 
 Each run:
 
-1. Read `OPEN_LOOPS_API_TOKEN` from the secret store. Send `Authorization: Bearer <token>` and `Content-Type: application/json` on every `/api` call.
+1. Read `OPENLOOPS_API_TOKEN` from the secret store. Send `Authorization: Bearer <token>` and `Content-Type: application/json` on every `/api` call.
 2. Gather the open loops you actually need from me: decisions, things only I can do, questions you are blocked on, questions I asked that are still open, and things parked on someone else. Skip anything I dropped.
 3. Upsert them in one `POST {URL}/api/items/upsert`. One object or an array. Match on `external_key`. The same key updates the same card and returns the same id. A missing key creates a card.
 4. Close cards whose real-world loop is finished: `POST {URL}/api/items/{id}/close` with `{"status":"done"}` or `{"status":"dropped","note":"..."}`. Closing by id is how a resolved loop leaves the board. Do not delete rows. There is no delete API.

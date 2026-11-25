@@ -196,7 +196,7 @@ const samples: ItemChanges[] = [
   },
 ];
 
-const dbPath = process.env.DATABASE_PATH ?? resolve(process.cwd(), "data/open-loops.db");
+const dbPath = process.env.DATABASE_PATH ?? resolve(process.cwd(), "data/openloops.db");
 const db = openDatabase(dbPath);
 db.exec(`DELETE FROM outbox; DELETE FROM events; DELETE FROM meta;`);
 const results = upsertItems(

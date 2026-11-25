@@ -11,7 +11,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
   process.exit(1);
 }
 
-const dbPath = process.env.DATABASE_PATH ?? resolve(process.cwd(), "data/open-loops.db");
+const dbPath = process.env.DATABASE_PATH ?? resolve(process.cwd(), "data/openloops.db");
 const db = openDatabase(dbPath);
 reconcile(db);
 

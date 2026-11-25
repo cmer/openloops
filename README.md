@@ -53,7 +53,7 @@ probe    ---------------------->  /healthz
 server   --webhook POST-------->  assistant
 ```
 
-User actions are stored, then posted once to `WEBHOOK_URL` with an 8 second timeout. If the URL is empty or the POST fails, the same JSON is queued in an outbox the assistant can drain. SQLite lives at `DATABASE_PATH` (default `./data/open-loops.db`, `/data/open-loops.db` in Docker).
+User actions are stored, then posted once to `WEBHOOK_URL` with an 8 second timeout. If the URL is empty or the POST fails, the same JSON is queued in an outbox the assistant can drain. SQLite lives at `DATABASE_PATH` (default `./data/openloops.db`, `/data/openloops.db` in Docker).
 
 Actors stored on events are `user` (someone on the board) and `assistant` (API upserts, patches, and closes).
 
@@ -63,15 +63,15 @@ Node is not required on the host. Docker is.
 
 ```bash
 export API_TOKEN="$(openssl rand -hex 32)"
-export WEBHOOK_URL="https://hooks.example/open-loops"
+export WEBHOOK_URL="https://hooks.example/openloops"
 export WEBHOOK_KEY="$(openssl rand -hex 32)"
 export ASSISTANT_NAME="Assistant"
 
 docker compose up --build -d
-docker compose exec open-loops node dist/scripts/seed.js
+docker compose exec openloops node dist/scripts/seed.js
 ```
 
-Open `http://localhost:4732`. The compose file sets `INSECURE_ALLOW_UNPROTECTED=1` so this works from the published port. The SQLite file is in the `open-loops-data` volume.
+Open `http://localhost:4732`. The compose file sets `INSECURE_ALLOW_UNPROTECTED=1` so this works from the published port. The SQLite file is in the `openloops-data` volume.
 
 Seed data is fictional (a made-up bakery, a mascot, Northwind Supply) and safe to load again. Re-running refreshes the sample dates.
 
@@ -93,7 +93,7 @@ Copy `.env.example`. Do not commit a filled-in `.env`.
 | `CF_ACCESS_AUD` | with the team domain | Audience (AUD) tag of the Access application. |
 | `INSECURE_ALLOW_UNPROTECTED` | local only | Set to `1` to serve the UI with no Access check. Ignored once both Access variables are valid. The process logs a warning when a request is served this way. |
 | `PORT` | no | Default `4732`. |
-| `DATABASE_PATH` | no | Default `./data/open-loops.db`. Docker uses `/data/open-loops.db`. |
+| `DATABASE_PATH` | no | Default `./data/openloops.db`. Docker uses `/data/openloops.db`. |
 | `NODE_ENV` | no | `production` in the image, which turns on the built UI. |
 
 ## Cloudflare Tunnel and Access
@@ -103,7 +103,7 @@ The UI routes (`/`, static files, `/hq/board`, `/hq/items/:id`, `/hq/items/:id/a
 Access usually bypasses `/api` and `/healthz`. The app still checks the bearer token on `/api`.
 
 1. Run the container on the machine that will hold the tunnel. Leave it bound to localhost if you can (`127.0.0.1:4732:4732`). The published compose file binds all interfaces for the local quick start.
-2. In Cloudflare Zero Trust, create a tunnel and point the public hostname at `http://localhost:4732` (or `http://open-loops:4732` if cloudflared shares the Docker network).
+2. In Cloudflare Zero Trust, create a tunnel and point the public hostname at `http://localhost:4732` (or `http://openloops:4732` if cloudflared shares the Docker network).
 3. Create a self-hosted Access application for that hostname. Policy: Allow, include your email or group. Copy the team domain and the application audience (AUD) tag.
 4. Add a second self-hosted application, or a path policy, for `/api` and `/healthz` with a **Bypass** decision for everyone. The assistant and the health check should not be challenged by Access. A service token works too, if the assistant can send `Cf-Access-Client-Id` and `Cf-Access-Client-Secret`. Bypass is the simpler match for a client that only knows `API_TOKEN`.
 5. Set `CF_ACCESS_TEAM_DOMAIN` and `CF_ACCESS_AUD`. Unset `INSECURE_ALLOW_UNPROTECTED`. Restart the container.
@@ -123,7 +123,7 @@ If the variables are set but invalid, every UI request is refused, including loc
 The server POSTs once, with an 8 second timeout. The browser does not call the assistant.
 
 ```http
-POST /open-loops
+POST /openloops
 Host: hooks.example
 Content-Type: application/json
 Authorization: Bearer <WEBHOOK_KEY>

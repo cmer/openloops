@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 export type Theme = "system" | "light" | "dark";
 
 /** Keep in sync with the pre-paint script in index.html. */
-const KEY = "open-loops-theme";
+const KEY = "openloops-theme";
 
 function read(): Theme {
   try {
