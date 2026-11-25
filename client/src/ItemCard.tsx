@@ -81,7 +81,7 @@ export function ReplyPanel({
   function submit(event: FormEvent) {
     event.preventDefault();
     const reply = text.trim();
-    if (reply) onAct("reply", reply);
+    if (reply && !busy) onAct("reply", reply);
   }
 
   return (
@@ -97,9 +97,15 @@ export function ReplyPanel({
         placeholder="Write the answer"
         value={text}
         onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          // Cmd+Enter (Ctrl+Enter off Mac) sends; plain Enter still adds a new line.
+          if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey) || event.nativeEvent.isComposing) return;
+          event.preventDefault();
+          event.currentTarget.form?.requestSubmit();
+        }}
       />
       <div className="ol-panel-row">
-        <Btn variant="primary" type="submit" disabled={busy || !text.trim()}>
+        <Btn variant="primary" type="submit" disabled={busy || !text.trim()} title="Send reply (⌘↵)">
           Send reply
         </Btn>
         <Btn variant="quiet" onClick={onCancel}>
