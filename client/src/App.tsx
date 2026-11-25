@@ -52,6 +52,8 @@ export function App() {
     const stored = readStored("openloops-filter");
     return isSectionFilter(stored) ? stored : "all";
   });
+  // Recently done starts collapsed; only an explicit "0" (the user opened it) keeps it open across reloads.
+  const [doneCollapsed, setDoneCollapsed] = useState(() => readStored("openloops-done-collapsed") !== "0");
   const [theme, setTheme] = useTheme();
   const [modalId, setModalId] = useState<number | null>(null);
   const assistantName = board?.assistant_name?.trim() || "Assistant";
@@ -131,6 +133,14 @@ export function App() {
     setBlur((current) => {
       const next = !current;
       store("openloops-blur", next ? "1" : "0");
+      return next;
+    });
+  }
+
+  function toggleDone() {
+    setDoneCollapsed((current) => {
+      const next = !current;
+      store("openloops-done-collapsed", next ? "1" : "0");
       return next;
     });
   }
@@ -229,6 +239,8 @@ export function App() {
           title={section.title}
           hint={sectionHint(section.id, assistantName)}
           items={groups[section.id]}
+          // Filtering to Recently done means the user wants to see it, so the toggle only applies on the full board.
+          {...(section.id === "done" && activeFilter === "all" ? { collapsed: doneCollapsed, onToggle: toggleDone } : {})}
           renderItem={(item) => (
             <ItemCard
               key={item.id}
@@ -281,6 +293,8 @@ export function App() {
                   now={now}
                   onOpen={(item) => setModalId(item.id)}
                   onMove={(item, section: Section) => void onAct(item, "move", section)}
+                  doneCollapsed={doneCollapsed}
+                  onToggleDone={toggleDone}
                 />
               ))}
           </main>

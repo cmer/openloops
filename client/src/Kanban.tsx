@@ -1,6 +1,7 @@
 import { useRef, useState, useSyncExternalStore } from "react";
 import type { Item, Section } from "../../shared/types";
 import type { Groups } from "./order";
+import { Chevron } from "./SectionBlock";
 import { BOARD_SECTIONS, SECTION_LABEL } from "./sections";
 import { ageDays, ageLabel, formatDay, isOverdue } from "./time";
 
@@ -24,11 +25,15 @@ export function KanbanBoard({
   now,
   onOpen,
   onMove,
+  doneCollapsed,
+  onToggleDone,
 }: {
   groups: Groups;
   now: number;
   onOpen: (item: Item) => void;
   onMove: (item: Item, section: Section) => void;
+  doneCollapsed: boolean;
+  onToggleDone: () => void;
 }) {
   const canDrag = useFinePointer();
   const [dragId, setDragId] = useState<number | null>(null);
@@ -50,13 +55,15 @@ export function KanbanBoard({
       <div className="ol-board">
         {columns.map((section) => {
           const list = groups[section.id];
+          const collapsible = section.id === "done";
+          const collapsed = collapsible && doneCollapsed;
           return (
             <section
               key={section.id}
               aria-label={section.title}
               data-col={section.id}
-              className={`ol-col${section.id === "done" ? " ol-col--done" : ""}${target === section.id ? " is-target" : ""}`}
-              style={list.length ? undefined : { maxWidth: "12rem" }}
+              className={`ol-col${section.id === "done" ? " ol-col--done" : ""}${collapsed ? " is-collapsed" : ""}${target === section.id ? " is-target" : ""}`}
+              style={list.length && !collapsed ? undefined : { maxWidth: "12rem" }}
               onDragOver={(event) => {
                 if (!accepts(section.id)) return;
                 event.preventDefault();
@@ -73,10 +80,25 @@ export function KanbanBoard({
               }}
             >
               <div className="ol-col-head">
-                <h2>{section.title}</h2>
+                <h2>
+                  {collapsible ? (
+                    <button
+                      type="button"
+                      className="ol-collapse"
+                      aria-expanded={!collapsed}
+                      aria-controls={`col-${section.id}`}
+                      onClick={onToggleDone}
+                    >
+                      <Chevron open={!collapsed} />
+                      {section.title}
+                    </button>
+                  ) : (
+                    section.title
+                  )}
+                </h2>
                 <b>{list.length}</b>
               </div>
-              <div className="ol-col-list">
+              <div id={`col-${section.id}`} className="ol-col-list" hidden={collapsed}>
                 {list.length ? (
                   list.map((item) => (
                     <KanbanCard
