@@ -13,5 +13,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["server", "shared", "tests"]
+  "include": ["server", "shared", "tests"],
+  "exclude": ["tests/client"]
 }

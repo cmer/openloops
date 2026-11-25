@@ -76,13 +76,13 @@ export function accessStartupWarning(options: AccessOptions): string | null {
     return "INSECURE_ALLOW_UNPROTECTED=1 is set, but Cloudflare Access is configured, so the UI still requires a valid Access token. Remove the insecure switch.";
   }
   if (options.insecureAllowUnprotected) {
-    return "WARNING: INSECURE_ALLOW_UNPROTECTED=1. Open Loops is serving the UI with no Cloudflare Access check. Do not expose this process to a network.";
+    return "WARNING: INSECURE_ALLOW_UNPROTECTED=1. OpenLoops is serving the UI with no Cloudflare Access check. Do not expose this process to a network.";
   }
   if (mode === "invalid") {
     return "WARNING: CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD must both be valid before the UI will load. The team domain must look like team.cloudflareaccess.com. Until then every UI request is refused, including localhost.";
   }
   if (mode === "off") {
-    return "Open Loops will refuse the UI except for loopback requests whose Host is localhost. Set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD, or INSECURE_ALLOW_UNPROTECTED=1 for local development only.";
+    return "OpenLoops will refuse the UI except for loopback requests whose Host is localhost. Set CF_ACCESS_TEAM_DOMAIN and CF_ACCESS_AUD, or INSECURE_ALLOW_UNPROTECTED=1 for local development only.";
   }
   return null;
 }
@@ -151,7 +151,7 @@ function denialPage(title: string, detail: string): string {
   <main>
     <h1>${escapeHtml(title)}</h1>
     <p>${escapeHtml(detail)}</p>
-    <p>Open Loops has no built-in login. The board stays dark unless Cloudflare Access is actually in front of it.</p>
+    <p>OpenLoops has no built-in login. The board stays dark unless Cloudflare Access is actually in front of it.</p>
     <ol>
       <li>Run the server and point a Cloudflare Tunnel at its port.</li>
       <li>Create a self-hosted Access application for that hostname. Copy the team domain and the application audience (AUD) tag.</li>
@@ -419,7 +419,7 @@ export function createAccessChecker(options: AccessOptions = {}) {
       return deny(
         503,
         "Cloudflare Access keys could not be loaded",
-        "Open Loops could not download this team's signing keys, so it is refusing the board instead of skipping the check. Confirm CF_ACCESS_TEAM_DOMAIN and that this server can reach the team's /cdn-cgi/access/certs endpoint.",
+        "OpenLoops could not download this team's signing keys, so it is refusing the board instead of skipping the check. Confirm CF_ACCESS_TEAM_DOMAIN and that this server can reach the team's /cdn-cgi/access/certs endpoint.",
       );
     }
     const key = keys.get(parsed.kid);

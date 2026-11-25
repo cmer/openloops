@@ -1,6 +1,6 @@
-# Open Loops
+# OpenLoops
 
-Open Loops is a self-hosted board for the open loops between you and an assistant: decisions, actions, questions, stalled threads, and what is waiting on someone else.
+OpenLoops is a self-hosted board for the open loops between you and an assistant: decisions, actions, questions, stalled threads, and what is waiting on someone else.
 
 You use the page, on a phone or a desktop. The page saves the action immediately and the server notifies the assistant. The assistant pushes and updates cards through the JSON API.
 
@@ -20,7 +20,7 @@ docs/screenshots/card.png
 
 ## Features
 
-Sections, in order. A section is hidden when it is empty:
+Sections, in order. The sidebar lists every section with its count (empty ones stay, dimmed); the list hides empty sections:
 
 1. Needs your decision (`decision`)
 2. Needs your action (`action`)
@@ -30,7 +30,7 @@ Sections, in order. A section is hidden when it is empty:
 6. Waiting on others (`waiting_on_others`)
 7. Recently done (`done`, closed in the last 7 days)
 
-The header toggles List and Kanban, and this browser remembers the choice. Kanban columns follow the same order and scroll sideways on a phone. Click a card in either view to open it. On a phone the editor is a full-screen sheet.
+The top bar toggles List and Kanban, and this browser remembers the choice. In the list, click a section in the sidebar to work only that section (Prev/Next, `j` / `k` and auto-advance stay inside it), or Everything for the whole board. In Kanban, a sidebar click scrolls to that column. Kanban columns follow the same order and scroll sideways on a phone. Click a card in either view to open it. On a phone the sidebar becomes swipeable tabs and the editor is a full-screen sheet. The theme follows the system, or pick Light or Dark.
 
 Shortcuts in the editor: `d` done, `s` snooze until tomorrow, `x` drop, `r` reply, `j` / `k` or the arrow keys for the next and previous card, and Esc to close. After an action, the editor moves to the next open card. On a desktop with a mouse, drag an open card onto another column. The Done column is not a drop target. A drag updates the section and sends a webhook with type `move`.
 
@@ -38,7 +38,7 @@ A list card shows the title, source, age in days (older than 7 days is highlight
 
 Snoozed cards are hidden until `snoozed_until`, then they come back. An open card with no activity for 7 days moves to Stalled and keeps its previous section in `original_section`. A later edit, reply, or patch brings it back. Re-upserting the same title with the original section does not clear the stall, so a routine sync will not undo it. Omit `last_activity_at` on those upserts unless you mean to set the clock.
 
-The header shows counts, the last time the assistant called `POST /api/sync/complete`, and how many webhook events are still queued. Blur for sharing hides titles and notes. The board refreshes every 60 seconds. Actions update the page immediately, then the server confirms them. A ping box sends a freeform note to the assistant. It does not become a card.
+The sidebar shows counts, overdue items, the last time the assistant called `POST /api/sync/complete`, and how many webhook events are still queued. Blur for sharing hides titles and notes. The board refreshes every 60 seconds. Actions update the page immediately, then the server confirms them. The message box above the board sends a freeform note to the assistant. It does not become a card.
 
 Limits enforced by the API: title 300 characters, body 20,000, source / owner / external key / choice 200, option label and value 120, at most 12 options, reply / note / ping 4,000, 200 cards per upsert, 500 outbox ids per ack, request body 1,000,000 bytes.
 
@@ -88,7 +88,7 @@ Copy `.env.example`. Do not commit a filled-in `.env`.
 | `API_TOKEN` | for the assistant | Bearer token for every `/api` route. If it is empty, `/api` returns 401. Compared in constant time. |
 | `WEBHOOK_URL` | for delivery | Where the server POSTs each action from the board. If it is empty, actions are saved and queued in the outbox. |
 | `WEBHOOK_KEY` | with the webhook | Sent as `Authorization: Bearer <key>` and `X-Automation-Key: <key>`. |
-| `ASSISTANT_NAME` | no | Name in the header, ping box, and history. Default `Assistant`. Trimmed, control characters removed, capped at 60 characters. |
+| `ASSISTANT_NAME` | no | Name in the sidebar, message box, and history. Default `Assistant`. Trimmed, control characters removed, capped at 60 characters. |
 | `CF_ACCESS_TEAM_DOMAIN` | to serve the UI publicly | Team host, for example `team.cloudflareaccess.com`. `https://` and a trailing slash are accepted. Any other host is rejected. |
 | `CF_ACCESS_AUD` | with the team domain | Audience (AUD) tag of the Access application. |
 | `INSECURE_ALLOW_UNPROTECTED` | local only | Set to `1` to serve the UI with no Access check. Ignored once both Access variables are valid. The process logs a warning when a request is served this way. |
@@ -164,7 +164,7 @@ If the POST fails or the URL is unset, the same JSON is stored in the outbox. Th
 3. `POST /api/items/:id/close` when the loop is resolved. There is no delete.
 4. `GET /api/events?since=<cursor>` for actions the webhook missed. `since` is exclusive. Only `user` events are returned.
 5. `GET /api/outbox`, act, then `POST /api/outbox/ack` with the ids you handled.
-6. `POST /api/sync/complete` so the header can show the sync time.
+6. `POST /api/sync/complete` so the sidebar can show the sync time.
 
 A reply stays open until you close the card. A choice is already done; do the thing they picked. A drop means do not recreate that key. A snooze means stay quiet until `value`. A move is the person correcting your filing. `docs/GROKBOT_SETUP_PROMPT.md` is a copy-paste prompt for wiring an assistant that has routines, a webhook trigger, memory, and a secrets store.
 
@@ -314,7 +314,7 @@ curl -s "$BASE/api/events?since=2026-01-01T00:00:00.000Z" \
 
 ### POST /api/sync/complete
 
-Stores the "last synced" time shown in the header. `at` is optional and defaults to now.
+Stores the "last synced" time shown in the sidebar. `at` is optional and defaults to now.
 
 ```bash
 curl -s -X POST "$BASE/api/sync/complete" \

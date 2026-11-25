@@ -19,17 +19,31 @@ export function formatDay(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function formatSynced(iso: string | null, now: number, assistantName: string): string {
-  if (!iso) return `${assistantName} hasn't synced yet`;
-  const delta = now - Date.parse(iso);
-  if (Number.isNaN(delta)) return `${assistantName} hasn't synced yet`;
-  const minutes = Math.round(delta / 60_000);
-  if (minutes < 1) return `Last synced from ${assistantName} · just now`;
-  if (minutes < 60) return `Last synced from ${assistantName} · ${minutes}m ago`;
+export function formatWeekday(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+/** "just now", "5m ago", "3h ago", then "2d ago" (sync line) or a date (history). */
+export function ago(iso: string, now: number, older: "days" | "date" = "days"): string {
+  const minutes = Math.round((now - Date.parse(iso)) / 60_000);
+  if (Number.isNaN(minutes)) return "";
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.round(minutes / 60);
-  if (hours < 36) return `Last synced from ${assistantName} · ${hours}h ago`;
-  const days = Math.round(hours / 24);
-  return `Last synced from ${assistantName} · ${days}d ago`;
+  if (hours < 36) return `${hours}h ago`;
+  return older === "date" ? formatDay(iso) : `${Math.round(hours / 24)}d ago`;
+}
+
+export function isOverdue(item: Pick<Item, "status" | "due_at">, now: number): boolean {
+  return item.status === "open" && Boolean(item.due_at) && Date.parse(item.due_at ?? "") < now;
+}
+
+export function hostname(link: string): string {
+  try {
+    return new URL(link).host;
+  } catch {
+    return "Link";
+  }
 }
 
 export function isVisible(item: Pick<Item, "status" | "closed_at">, now: number): boolean {
@@ -53,7 +67,7 @@ export function snoozeChoices(now = new Date()): { id: string; label: string; de
   const nextWeek = new Date(now);
   nextWeek.setDate(nextWeek.getDate() + 7);
   const detail = (date: Date) =>
-    date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    `${date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · 9 AM`;
   const choices = [
     { id: "tomorrow", label: "Tomorrow", date: atNine(tomorrow) },
     { id: "friday", label: "Friday", date: atNine(friday) },

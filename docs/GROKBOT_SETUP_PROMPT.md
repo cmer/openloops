@@ -1,10 +1,10 @@
-# Prompt: connect a Grok Bot to Open Loops
+# Prompt: connect a Grok Bot to OpenLoops
 
 Copy everything below the line into a new chat with your own Grok Bot. It assumes a desktop assistant that has a shell, routines (including routines triggered by an incoming webhook), a memory, and a secrets store. Fill nothing in beforehand. The bot should ask you for the two values it needs.
 
 ---
 
-You are connecting yourself to my Open Loops board. Open Loops is a self-hosted list and kanban of everything you need from me: decisions, actions, questions, and things waiting on someone else. I use the board. You feed it and you consume what I do there. There is no login inside the app. The board is for me, behind Cloudflare Access. You use the JSON API with a bearer token.
+You are connecting yourself to my OpenLoops board. OpenLoops is a self-hosted list and kanban of everything you need from me: decisions, actions, questions, and things waiting on someone else. I use the board. You feed it and you consume what I do there. There is no login inside the app. The board is for me, behind Cloudflare Access. You use the JSON API with a bearer token.
 
 Do this in order. Do not skip the questions. Do not invent a URL or a token.
 
@@ -12,7 +12,7 @@ Do this in order. Do not skip the questions. Do not invent a URL or a token.
 
 Ask me for two things, one at a time:
 
-1. The base URL of my Open Loops instance. It should look like `https://loops.example.com`, with an `https` scheme, no path, no query, and no credentials. Repeat the URL back and wait until I confirm it.
+1. The base URL of my OpenLoops instance. It should look like `https://loops.example.com`, with an `https` scheme, no path, no query, and no credentials. Repeat the URL back and wait until I confirm it.
 2. The API token. Tell me to paste it once. Store it in your secrets store under the name `OPEN_LOOPS_API_TOKEN`. Never echo the token, never write it into memory, a routine prompt, a file in the chat, or a command line that would show up in a transcript. After it is stored, tell me to rotate it if it has already appeared in this chat, and do not repeat it while saying so.
 
 If I only give you a token and no URL, stop and ask for the URL. If the URL does not parse, ask again. Remember the confirmed URL in memory. Remember that the token lives in the secret `OPEN_LOOPS_API_TOKEN` and nowhere else.
@@ -66,7 +66,7 @@ If the delivery is a type you do not know, store the body in memory and tell me,
 
 ## 3. Put the webhook on the instance
 
-Open Loops reads the webhook from its own environment, not from an API call:
+OpenLoops reads the webhook from its own environment, not from an API call:
 
 - `WEBHOOK_URL` = the routine's webhook URL
 - `WEBHOOK_KEY` = `OPEN_LOOPS_WEBHOOK_KEY`
@@ -130,7 +130,7 @@ Do these and tell me the result of each. Do not print the token or the webhook k
 
 - [ ] `GET /healthz` returns `{"ok":true}`.
 - [ ] `GET /api/items` without the token returns 401, and with the token returns 200.
-- [ ] Upsert one sample card with external key `setup:check`, section `action`, title `Confirm Open Loops is connected`. I can see it on the board.
+- [ ] Upsert one sample card with external key `setup:check`, section `action`, title `Confirm OpenLoops is connected`. I can see it on the board.
 - [ ] I mark that card done, or you close it with the API if I ask you to. It leaves the open lists.
 - [ ] I take one action on the board (done, snooze, drop, reply, a decision, or a drag). Your webhook routine receives it, or, if the webhook URL is not set yet, the event is in `GET /api/outbox` and your sync routine acks it.
 - [ ] `POST /api/sync/complete` runs, and the header can show a sync time.

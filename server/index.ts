@@ -51,7 +51,7 @@ const app = createApp({
 });
 
 const server = serve({ fetch: app.fetch, hostname: "0.0.0.0", port }, (info) => {
-  console.log(`Open Loops listening on http://${info.address}:${info.port}`);
+  console.log(`OpenLoops listening on http://${info.address}:${info.port}`);
   console.log(`database ${dbPath}`);
 });
 
