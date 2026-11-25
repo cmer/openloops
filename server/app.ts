@@ -22,6 +22,7 @@ import {
   recordUserMessage,
   replaceBots,
   setMeta,
+  summarize,
   upsertItems,
   type DB,
 } from "./db.js";
@@ -44,6 +45,8 @@ import { deliverWebhook, type WebhookFetch } from "./webhook.js";
 export type AppOptions = {
   db: DB;
   apiToken: string;
+  /** Read-only token accepted by GET /api/summary, in addition to apiToken. */
+  summaryToken?: string;
   webhookUrl?: string;
   webhookKey?: string;
   fetchImpl?: WebhookFetch;
@@ -142,6 +145,26 @@ export function createApp(opts: AppOptions): Hono {
       now,
     });
     return c.json({ ok: true, delivered, outbox_count: countOutbox(opts.db), to: bot.handle });
+  });
+
+  app.get("/api/summary", (c) => {
+    const presented = bearerToken(c.req.header("authorization"));
+    const accepted = [opts.apiToken, opts.summaryToken ?? ""].filter(Boolean);
+    if (!presented || !accepted.some((token) => safeEqual(presented, token))) {
+      return c.json({ error: "Unauthorized" }, 401);
+    }
+    const now = clock();
+    const { open, overdue, sections } = summarize(opts.db, now);
+    return c.json({
+      generated_at: now.toISOString(),
+      needs_action: sections.action,
+      waiting_on_you: sections.question_for_you,
+      overdue,
+      decisions: sections.decision,
+      open,
+      sections,
+      last_synced_at: getMeta(opts.db, "last_synced_at"),
+    });
   });
 
   const api = new Hono();

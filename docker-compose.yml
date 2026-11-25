@@ -18,6 +18,7 @@ services:
       DATABASE_PATH: /data/openloops.db
       ASSISTANT_NAME: ${ASSISTANT_NAME:-Assistant}
       API_TOKEN: ${API_TOKEN:-}
+      SUMMARY_TOKEN: ${SUMMARY_TOKEN:-}
       WEBHOOK_URL: ${WEBHOOK_URL:-}
       WEBHOOK_KEY: ${WEBHOOK_KEY:-}
       CF_ACCESS_TEAM_DOMAIN: ${CF_ACCESS_TEAM_DOMAIN:-}

@@ -31,6 +31,7 @@ Copy `.env.example`. Do not commit a filled-in `.env`.
 | Variable | Required | Purpose |
 | --- | --- | --- |
 | `API_TOKEN` | for the assistant | Bearer token for every `/api` route. If it is empty, `/api` returns 401. Compared in constant time. |
+| `SUMMARY_TOKEN` | no | Read-only bearer token for `GET /api/summary`, for dashboards such as Homepage. It cannot reach any other route. `API_TOKEN` also works for the summary. |
 | `WEBHOOK_URL` | for delivery | Where the server POSTs each action from the board. If it is empty, actions are saved and queued in the outbox. |
 | `WEBHOOK_KEY` | with the webhook | Sent as `Authorization: Bearer <key>` and `X-Automation-Key: <key>`. |
 | `ASSISTANT_NAME` | no | Name in the sidebar, message box, and history. Default `Assistant`. Trimmed, control characters removed, capped at 60 characters. |

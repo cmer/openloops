@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import type { Item, ItemStatus, Section } from "../shared/types.js";
+import { SECTIONS, type Item, type ItemStatus, type Section } from "../shared/types.js";
 import type { Bot } from "./bots.js";
 import { HttpError } from "./errors.js";
 import type { ItemChanges, ParsedAction } from "./validate.js";
@@ -655,6 +655,28 @@ export function listItems(db: DB, filters: { status?: ItemStatus; section?: Sect
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = db.prepare(`SELECT * FROM items ${where} ORDER BY id ASC`).all(...params) as ItemRow[];
   return rows.map(mapItem);
+}
+
+export type Summary = {
+  open: number;
+  overdue: number;
+  sections: Record<Exclude<Section, "done">, number>;
+};
+
+/** Counts of open items, for dashboards. Overdue matches the board: open with a past due_at. */
+export function summarize(db: DB, now = new Date()): Summary {
+  reconcile(db, now);
+  const rows = db.prepare(`SELECT section, due_at FROM items WHERE status = 'open'`).all() as {
+    section: string;
+    due_at: string | null;
+  }[];
+  const sections = Object.fromEntries(SECTIONS.filter((s) => s !== "done").map((s) => [s, 0])) as Summary["sections"];
+  let overdue = 0;
+  for (const row of rows) {
+    if (row.section in sections) sections[row.section as keyof Summary["sections"]] += 1;
+    if (row.due_at && Date.parse(row.due_at) < now.getTime()) overdue += 1;
+  }
+  return { open: rows.length, overdue, sections };
 }
 
 export function listBoardItems(db: DB, now = new Date()): Item[] {

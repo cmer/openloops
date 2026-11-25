@@ -43,6 +43,7 @@ const isProd = process.env.NODE_ENV === "production";
 const app = createApp({
   db,
   apiToken: process.env.API_TOKEN ?? "",
+  summaryToken: process.env.SUMMARY_TOKEN || undefined,
   webhookUrl: process.env.WEBHOOK_URL || undefined,
   webhookKey: process.env.WEBHOOK_KEY ?? "",
   assistantName: process.env.ASSISTANT_NAME,
