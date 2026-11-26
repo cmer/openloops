@@ -11,7 +11,7 @@ probe    ---------------------->  /healthz
 server   --webhook POST-------->  assistant
 ```
 
-User actions are stored, then posted once to `WEBHOOK_URL` with an 8 second timeout. If the URL is empty or the POST fails, the same JSON is queued in an outbox the assistant can drain. SQLite lives at `DATABASE_PATH` (default `./data/openloops.db`, `/data/openloops.db` in Docker).
+User actions are stored, then posted once to `WEBHOOK_URL` with an 8 second timeout. If the URL is empty or the POST fails, the same JSON is queued in an outbox the assistant can drain. Refresh (`POST /hq/refresh-requests`) is one of those actions: event type `refresh_requested`. It stays pending on the board until `POST /api/sync/complete`, and a second press within 10 minutes does not send another webhook. SQLite lives at `DATABASE_PATH` (default `./data/openloops.db`, `/data/openloops.db` in Docker).
 
 Actors stored on events are `user` (someone on the board) and `assistant` (API upserts, patches, and closes).
 
@@ -33,4 +33,4 @@ npm run build
 npm start
 ```
 
-`npm start` serves the built UI and the API together on port `4732`. `npm run seed` loads the fictional sample cards. Tests cover API auth, upsert idempotency, close, events since, outbox on webhook failure, the stall and snooze rules, and the Access check (missing config, loopback, the insecure switch, JWT success and failure, key cache).
+`npm start` serves the built UI and the API together on port `4732`. `npm run seed` loads the fictional sample cards. Tests cover API auth, upsert idempotency, close, events since, outbox on webhook failure, refresh requests (debounce and clearing on sync), the stall and snooze rules, and the Access check (missing config, loopback, the insecure switch, JWT success and failure, key cache).

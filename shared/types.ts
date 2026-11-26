@@ -18,6 +18,15 @@ export const USER_ACTIONS = ["done", "snooze", "drop", "reply", "choose", "move"
 
 export type UserActionType = (typeof USER_ACTIONS)[number];
 
+/** A second Refresh inside this window returns the pending request and does not send another webhook. */
+export const REFRESH_WAIT_MS = 10 * 60 * 1000;
+
+/** Shown on the board while a refresh is waiting for POST /api/sync/complete. */
+export type RefreshState = {
+  pending: boolean;
+  requested_at: string | null;
+};
+
 export type Option = {
   label: string;
   value: string;

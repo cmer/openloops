@@ -8,6 +8,7 @@ import {
   ackOutbox,
   applyUserAction,
   closeItem,
+  completeSync,
   countOutbox,
   getItem,
   getMeta,
@@ -20,8 +21,9 @@ import {
   patchItem,
   reconcile,
   recordUserMessage,
+  refreshState,
   replaceBots,
-  setMeta,
+  requestRefresh,
   summarize,
   upsertItems,
   type DB,
@@ -106,6 +108,7 @@ export function createApp(opts: AppOptions): Hono {
       assistant_name: assistantName,
       last_synced_at: getMeta(opts.db, "last_synced_at"),
       outbox_count: countOutbox(opts.db),
+      refresh: refreshState(opts.db),
       items: listBoardItems(opts.db, now),
     });
   });
@@ -145,6 +148,21 @@ export function createApp(opts: AppOptions): Hono {
       now,
     });
     return c.json({ ok: true, delivered, outbox_count: countOutbox(opts.db), to: bot.handle });
+  });
+
+  app.post("/hq/refresh-requests", async (c) => {
+    await readBody(c);
+    const now = clock();
+    const { refresh, debounced, webhook } = requestRefresh(opts.db, now);
+    const delivered = webhook
+      ? await deliverWebhook(opts.db, webhook, {
+          url: opts.webhookUrl,
+          key: webhookKey,
+          fetchImpl,
+          now,
+        })
+      : false;
+    return c.json({ ok: true, debounced, delivered, outbox_count: countOutbox(opts.db), refresh });
   });
 
   app.get("/api/summary", (c) => {
@@ -207,7 +225,7 @@ export function createApp(opts: AppOptions): Hono {
 
   api.post("/sync/complete", async (c) => {
     const at = parseSync(await readBody(c), clock());
-    setMeta(opts.db, "last_synced_at", at);
+    completeSync(opts.db, at);
     return c.json({ last_synced_at: at });
   });
 

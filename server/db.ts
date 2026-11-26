@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import Database from "better-sqlite3";
-import { SECTIONS, type Item, type ItemStatus, type Section } from "../shared/types.js";
+import { REFRESH_WAIT_MS, SECTIONS, type Item, type ItemStatus, type RefreshState, type Section } from "../shared/types.js";
 import type { Bot } from "./bots.js";
 import { HttpError } from "./errors.js";
 import type { ItemChanges, ParsedAction } from "./validate.js";
@@ -33,16 +33,20 @@ type ItemRow = {
 };
 
 export type WebhookBody = {
-  type: "done" | "snooze" | "drop" | "reply" | "choose" | "move" | "message";
+  type: "done" | "snooze" | "drop" | "reply" | "choose" | "move" | "message" | "refresh_requested";
   item_id: number | null;
   external_key: string | null;
   title: string | null;
   value: string | null;
   at: string;
+  /** Set on refresh_requested. When the person asked the assistant to look again. Same instant as `at`. */
+  requested_at?: string;
   /** Message webhooks to another bot: its handle and name. Absent for messages to the assistant. */
   to?: string;
   to_name?: string;
 };
+
+const REFRESH_REQUESTED_AT = "refresh_requested_at";
 
 export type StoredEvent = {
   id: number;
@@ -557,6 +561,60 @@ export function applyUserAction(db: DB, id: number, action: ParsedAction, now: D
   };
 }
 
+/**
+ * Records a board Refresh. A pending request younger than REFRESH_WAIT_MS is returned as-is:
+ * no second event and no second webhook. An older pending request is replaced.
+ */
+export function requestRefresh(db: DB, now: Date): { refresh: RefreshState; debounced: boolean; webhook: WebhookBody | null } {
+  let debounced = false;
+  let requestedAt = "";
+  let webhook: WebhookBody | null = null;
+  db.transaction(() => {
+    const existing = getMeta(db, REFRESH_REQUESTED_AT);
+    if (existing) {
+      const age = now.getTime() - Date.parse(existing);
+      if (!Number.isNaN(age) && age >= 0 && age < REFRESH_WAIT_MS) {
+        debounced = true;
+        requestedAt = existing;
+        return;
+      }
+    }
+    requestedAt = now.toISOString();
+    setMeta(db, REFRESH_REQUESTED_AT, requestedAt);
+    insertEvent(db, {
+      item_id: null,
+      actor: "user",
+      type: "refresh_requested",
+      payload: { at: requestedAt, requested_at: requestedAt, value: null },
+      created_at: requestedAt,
+    });
+    webhook = {
+      type: "refresh_requested",
+      item_id: null,
+      external_key: null,
+      title: null,
+      value: null,
+      at: requestedAt,
+      requested_at: requestedAt,
+    };
+  })();
+  return { refresh: { pending: true, requested_at: requestedAt }, debounced, webhook };
+}
+
+export function refreshState(db: DB): RefreshState {
+  const requested_at = getMeta(db, REFRESH_REQUESTED_AT);
+  if (!requested_at) return { pending: false, requested_at: null };
+  return { pending: true, requested_at };
+}
+
+/** Stores the sync time and clears any pending refresh. One sync completes the wait. */
+export function completeSync(db: DB, at: string): void {
+  db.transaction(() => {
+    setMeta(db, "last_synced_at", at);
+    deleteMeta(db, REFRESH_REQUESTED_AT);
+  })();
+}
+
 export function recordUserMessage(db: DB, text: string, now: Date, to?: { handle: string; name: string }): WebhookBody {
   const iso = now.toISOString();
   insertEvent(db, {
@@ -825,4 +883,8 @@ export function setMeta(db: DB, key: string, value: string): void {
   db.prepare(
     `INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
   ).run(key, value);
+}
+
+export function deleteMeta(db: DB, key: string): void {
+  db.prepare(`DELETE FROM meta WHERE key = ?`).run(key);
 }

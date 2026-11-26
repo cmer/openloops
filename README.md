@@ -12,6 +12,7 @@ Your assistant keeps track of a lot: decisions it can't make alone, emails waiti
 - **Fast to clear.** Pick an option, mark it done, snooze it, or reply, all from the keyboard if you like.
 - **Nothing slips.** Cards with no activity for a week move to Stalled so you notice them. Overdue items are flagged.
 - **Your assistant stays in the loop.** Every action is sent to it immediately, and queued if it's offline.
+- **Refresh asks now.** Refresh tells your assistant to go look for new items, instead of waiting for the next scheduled sync. The board still reloads quietly every minute.
 - **Yours.** Self-hosted, one small process with SQLite. It sits behind Cloudflare Access, and it refuses to serve the board until that protection is in place.
 
 ## Features

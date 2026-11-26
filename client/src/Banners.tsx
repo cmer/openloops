@@ -1,6 +1,6 @@
-export type Banner = { id: number; kind: "ok" | "queued" | "error"; text: string };
+export type Banner = { id: number; kind: "ok" | "queued" | "error" | "notice"; text: string };
 
-const LABEL = { ok: "Sent", queued: "Queued", error: "Not saved" } as const;
+const LABEL = { ok: "Sent", queued: "Queued", error: "Not saved", notice: "Waiting" } as const;
 
 /** Bottom-centre stack. App removes each banner after about 4s. */
 export function Banners({ banners }: { banners: Banner[] }) {

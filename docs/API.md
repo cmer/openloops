@@ -9,10 +9,10 @@ The assistant talks to OpenLoops over a JSON API with a bearer token (`API_TOKEN
 3. `POST /api/items/:id/close` when the loop is resolved. There is no delete.
 4. `GET /api/events?since=<cursor>` for actions the webhook missed. `since` is exclusive. Only `user` events are returned.
 5. `GET /api/outbox`, act, then `POST /api/outbox/ack` with the ids you handled.
-6. `POST /api/sync/complete` so the sidebar can show the sync time.
+6. `POST /api/sync/complete` so the sidebar can show the sync time. This also clears a pending Refresh.
 7. If you relay messages to other bots, `PUT /api/bots` with the current list whenever it changes, so the message box can offer them after `@`.
 
-A reply stays open until you close the card. A choice is already done; do the thing they picked. A drop means do not recreate that key. A snooze means stay quiet until `value`. A move is the person correcting your filing. [GROKBOT_SETUP_PROMPT.md](GROKBOT_SETUP_PROMPT.md) is a copy-paste prompt for wiring an assistant that has routines, a webhook trigger, memory, and a secrets store.
+A reply stays open until you close the card. A choice is already done; do the thing they picked. A drop means do not recreate that key. A snooze means stay quiet until `value`. A move is the person correcting your filing. A `refresh_requested` event means they pressed Refresh: run a sync now, then `POST /api/sync/complete`. [GROKBOT_SETUP_PROMPT.md](GROKBOT_SETUP_PROMPT.md) is a copy-paste prompt for wiring an assistant that has routines, a webhook trigger, memory, and a secrets store.
 
 
 ## Webhook
@@ -38,7 +38,7 @@ X-Automation-Key: <WEBHOOK_KEY>
 }
 ```
 
-`type` is `done`, `snooze`, `drop`, `reply`, `choose`, `move`, or `message`.
+`type` is `done`, `snooze`, `drop`, `reply`, `choose`, `move`, `message`, or `refresh_requested`.
 
 | type | `value` |
 | --- | --- |
@@ -49,6 +49,19 @@ X-Automation-Key: <WEBHOOK_KEY>
 | `choose` | The chosen option's `value`. The card is done. |
 | `move` | The new section id. |
 | `message` | The message text. `item_id`, `external_key`, and `title` are `null`. When the person tagged another bot, `to` is its handle and `to_name` its name; pass the message on to that bot. Messages for the assistant itself have no `to`. |
+| `refresh_requested` | `null`. The person pressed Refresh. `item_id`, `external_key`, and `title` are `null`. `requested_at` is when they asked, and it is the same instant as `at`. Run a sync, then `POST /api/sync/complete`. |
+
+```json
+{
+  "type": "refresh_requested",
+  "item_id": null,
+  "external_key": null,
+  "title": null,
+  "value": null,
+  "at": "2026-11-26T12:00:00.000Z",
+  "requested_at": "2026-11-26T12:00:00.000Z"
+}
+```
 
 This is a shared secret on HTTPS, not a signature over the body. Verify it by comparing `Authorization` (after the `Bearer ` prefix) or `X-Automation-Key` to `WEBHOOK_KEY` with a constant-time compare. Reject the request when neither matches. Do not log the headers. Both headers carry the same key so a receiver that only looks at one of them still works.
 
@@ -241,7 +254,7 @@ Use `http://openloops:4732` when Homepage shares a Docker network with OpenLoops
 
 ### GET /api/events
 
-Actions taken on the board only (`actor` is `user`), oldest first. `since` is exclusive. Assistant upserts are not included.
+Actions taken on the board only (`actor` is `user`), oldest first. `since` is exclusive. Assistant upserts are not included. A `refresh_requested` event has `item_id` null. Its payload `at` and `requested_at` are the same instant as the webhook.
 
 ```bash
 curl -s "$BASE/api/events?since=2026-01-01T00:00:00.000Z" \
@@ -265,7 +278,7 @@ curl -s "$BASE/api/events?since=2026-01-01T00:00:00.000Z" \
 
 ### POST /api/sync/complete
 
-Stores the "last synced" time shown in the sidebar. `at` is optional and defaults to now.
+Stores the "last synced" time shown in the sidebar. `at` is optional and defaults to now. Also clears a pending refresh, so the board stops showing that it is waiting. Call this at the end of every sync, including one that a `refresh_requested` webhook started.
 
 ```bash
 curl -s -X POST "$BASE/api/sync/complete" \
@@ -351,11 +364,16 @@ These are for the page. They require Access (or a local escape hatch). They do n
 
 | Method and path | Body | Response |
 | --- | --- | --- |
-| `GET /hq/board` | | `{ generated_at, assistant_name, last_synced_at, outbox_count, items }` |
+| `GET /hq/board` | | `{ generated_at, assistant_name, last_synced_at, outbox_count, refresh, items }` |
 | `GET /hq/items/:id` | | `{ item, events }` |
 | `POST /hq/items/:id/act` | `{ "type": "done" \| "snooze" \| "drop" \| "reply" \| "choose" \| "move", "value"?: "..." }` | `{ ok, delivered, outbox_count, item }` |
 | `GET /hq/bots` | | `{ bots }`, the same list as `GET /api/bots` |
 | `POST /hq/message` | `{ "text": "...", "to"?: "handle" }` | `{ ok, delivered, outbox_count, to }` |
+| `POST /hq/refresh-requests` | | `{ ok, debounced, delivered, outbox_count, refresh }` |
+
+`refresh` is `{ "pending": false, "requested_at": null }` when nothing is waiting. After Refresh it is `{ "pending": true, "requested_at": "<ISO time>" }` until `POST /api/sync/complete`.
+
+`POST /hq/refresh-requests` is what the Refresh button calls. It stores a `user` event of type `refresh_requested` and sends the webhook above. `delivered` is whether this call's webhook was accepted. While a request is still pending and under 10 minutes old, another press does not send a second webhook: `debounced` is true, `delivered` is false, and `refresh` is the one already pending. A pending request 10 minutes old or older is replaced, and a new webhook is sent. If delivery fails or `WEBHOOK_URL` is unset, the same JSON is queued in the outbox, and the event is also in `GET /api/events`. The route uses the same Access check as the other `/hq` routes. It does not accept `API_TOKEN`.
 
 Without `to`, a message that starts with `@handle ` for a known bot goes to that bot, minus the tag. Any other leading `@word` stays in the text and goes to the assistant. An unknown `to` is a 400.
 

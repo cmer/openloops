@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { REFRESH_WAIT_MS } from "../shared/types.js";
 import { createApp } from "../server/app.js";
 import { openDatabase, type DB } from "../server/db.js";
 import type { WebhookFetch } from "../server/webhook.js";
@@ -491,6 +492,243 @@ describe("aging and snooze", () => {
     expect(((await res.json()) as { last_synced_at: string }).last_synced_at).toBe(at);
     const board = (await (await makeApp().request("/hq/board")).json()) as { last_synced_at: string };
     expect(board.last_synced_at).toBe(at);
+  });
+});
+
+describe("refresh requests", () => {
+  type RefreshBody = {
+    ok: boolean;
+    debounced: boolean;
+    delivered: boolean;
+    outbox_count: number;
+    refresh: { pending: boolean; requested_at: string | null };
+  };
+
+  function postRefresh(app: ReturnType<typeof createApp>, body?: string) {
+    return app.request("http://localhost/hq/refresh-requests", {
+      method: "POST",
+      headers: body === undefined ? undefined : { "content-type": "application/json" },
+      body,
+    });
+  }
+
+  it("sends refresh_requested, debounces for 10 minutes, and clears on sync complete", async () => {
+    const base = Date.now();
+    const start = new Date(base - REFRESH_WAIT_MS - 5_000);
+    let now = start;
+    const fetchImpl = vi.fn<WebhookFetch>(async () => new Response(null, { status: 204 }));
+    const app = createApp({
+      db,
+      apiToken: TOKEN,
+      webhookUrl: "http://hooks.example/hook",
+      webhookKey: "wk",
+      fetchImpl,
+      now: () => now,
+      access: { remoteAddress: () => "127.0.0.1", log: () => {} },
+    });
+
+    const first = await postRefresh(app, "{}");
+    expect(first.status).toBe(200);
+    const sent = (await first.json()) as RefreshBody;
+    expect(sent).toMatchObject({
+      ok: true,
+      debounced: false,
+      delivered: true,
+      refresh: { pending: true, requested_at: start.toISOString() },
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchImpl.mock.calls[0] ?? [];
+    expect(url).toBe("http://hooks.example/hook");
+    const headers = (init?.headers ?? {}) as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers.Authorization).toBe("Bearer wk");
+    expect(headers["X-Automation-Key"]).toBe("wk");
+    expect(JSON.parse(String(init?.body))).toEqual({
+      type: "refresh_requested",
+      item_id: null,
+      external_key: null,
+      title: null,
+      value: null,
+      at: start.toISOString(),
+      requested_at: start.toISOString(),
+    });
+
+    const pendingBoard = (await (await app.request("http://localhost/hq/board")).json()) as {
+      refresh: { pending: boolean; requested_at: string | null };
+    };
+    expect(pendingBoard.refresh).toEqual({ pending: true, requested_at: start.toISOString() });
+
+    now = new Date(start.getTime() + 60_000);
+    const soon = (await (await postRefresh(app, "{}")).json()) as RefreshBody;
+    expect(soon.debounced).toBe(true);
+    expect(soon.delivered).toBe(false);
+    expect(soon.refresh).toEqual({ pending: true, requested_at: start.toISOString() });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    now = new Date(start.getTime() + REFRESH_WAIT_MS - 1);
+    const almost = (await (await postRefresh(app, "{}")).json()) as RefreshBody;
+    expect(almost.debounced).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    now = new Date(start.getTime() + REFRESH_WAIT_MS);
+    const renewed = (await (await postRefresh(app, "{}")).json()) as RefreshBody;
+    expect(renewed.debounced).toBe(false);
+    expect(renewed.delivered).toBe(true);
+    expect(renewed.refresh.requested_at).toBe(now.toISOString());
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+
+    const syncedAt = new Date(start.getTime() + REFRESH_WAIT_MS + 1_000).toISOString();
+    const synced = await app.request("/api/sync/complete", {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ at: syncedAt }),
+    });
+    expect(synced.status).toBe(200);
+    const cleared = (await (await app.request("http://localhost/hq/board")).json()) as {
+      last_synced_at: string;
+      refresh: { pending: boolean; requested_at: string | null };
+    };
+    expect(cleared.last_synced_at).toBe(syncedAt);
+    expect(cleared.refresh).toEqual({ pending: false, requested_at: null });
+
+    now = new Date(start.getTime() + REFRESH_WAIT_MS + 2_000);
+    const after = (await (await postRefresh(app, "{}")).json()) as RefreshBody;
+    expect(after.debounced).toBe(false);
+    expect(after.delivered).toBe(true);
+    expect(after.refresh.requested_at).toBe(now.toISOString());
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+
+    const early = await app.request("/api/sync/complete", {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ at: start.toISOString() }),
+    });
+    expect(early.status).toBe(200);
+    const gone = (await (await app.request("http://localhost/hq/board")).json()) as {
+      refresh: { pending: boolean; requested_at: string | null };
+    };
+    expect(gone.refresh).toEqual({ pending: false, requested_at: null });
+
+    const events = (await (
+      await app.request(`/api/events?since=${encodeURIComponent(new Date(start.getTime() - 60_000).toISOString())}`, {
+        headers: { authorization: `Bearer ${TOKEN}` },
+      })
+    ).json()) as {
+      events: { type: string; actor: string; item_id: number | null; payload: { at?: string; requested_at?: string; value?: null } }[];
+    };
+    const refreshes = events.events.filter((event) => event.type === "refresh_requested");
+    expect(refreshes.map((event) => event.payload.requested_at)).toEqual([
+      start.toISOString(),
+      new Date(start.getTime() + REFRESH_WAIT_MS).toISOString(),
+      new Date(start.getTime() + REFRESH_WAIT_MS + 2_000).toISOString(),
+    ]);
+    expect(
+      refreshes.every(
+        (event) =>
+          event.actor === "user" &&
+          event.item_id === null &&
+          event.payload.value === null &&
+          event.payload.at === event.payload.requested_at,
+      ),
+    ).toBe(true);
+
+    const outbox = (await (await app.request("/api/outbox", { headers: { authorization: `Bearer ${TOKEN}` } })).json()) as {
+      events: unknown[];
+    };
+    expect(outbox.events).toHaveLength(0);
+  });
+
+  it("queues one outbox row when delivery fails and does not queue again while that request is pending", async () => {
+    const fetchImpl = vi.fn<WebhookFetch>(async () => {
+      throw new Error("connect ECONNREFUSED");
+    });
+    const app = createApp({
+      db,
+      apiToken: TOKEN,
+      webhookUrl: "http://hooks.example/hook",
+      webhookKey: "wk",
+      fetchImpl,
+      access: { remoteAddress: () => "127.0.0.1", log: () => {} },
+    });
+
+    const first = (await (await postRefresh(app, "{}")).json()) as RefreshBody;
+    expect(first.delivered).toBe(false);
+    expect(first.debounced).toBe(false);
+    expect(first.outbox_count).toBe(1);
+    expect(first.refresh.pending).toBe(true);
+
+    const queued = (await (await app.request("/api/outbox", { headers: { authorization: `Bearer ${TOKEN}` } })).json()) as {
+      events: { payload: Record<string, unknown> }[];
+    };
+    expect(queued.events).toHaveLength(1);
+    expect(queued.events[0]?.payload).toEqual({
+      type: "refresh_requested",
+      item_id: null,
+      external_key: null,
+      title: null,
+      value: null,
+      at: first.refresh.requested_at,
+      requested_at: first.refresh.requested_at,
+    });
+
+    const second = (await (await postRefresh(app, "{}")).json()) as RefreshBody;
+    expect(second.debounced).toBe(true);
+    expect(second.delivered).toBe(false);
+    expect(second.outbox_count).toBe(1);
+    expect(second.refresh.requested_at).toBe(first.refresh.requested_at);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const still = (await (await app.request("/api/outbox", { headers: { authorization: `Bearer ${TOKEN}` } })).json()) as {
+      events: unknown[];
+    };
+    expect(still.events).toHaveLength(1);
+  });
+
+  it("queues the refresh when the webhook URL is unset", async () => {
+    const fetchImpl = vi.fn<WebhookFetch>(async () => new Response(null, { status: 204 }));
+    const app = createApp({
+      db,
+      apiToken: TOKEN,
+      webhookKey: "wk",
+      fetchImpl,
+      access: { remoteAddress: () => "127.0.0.1", log: () => {} },
+    });
+    const body = (await (await postRefresh(app)).json()) as RefreshBody;
+    expect(body.delivered).toBe(false);
+    expect(body.debounced).toBe(false);
+    expect(body.outbox_count).toBe(1);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("uses the board access check and does not require the API token", async () => {
+    const open = createApp({
+      db,
+      apiToken: TOKEN,
+      webhookUrl: "http://hooks.example/hook",
+      webhookKey: "wk",
+      fetchImpl: okFetch,
+      access: { remoteAddress: () => "127.0.0.1", log: () => {} },
+    });
+    const bad = await open.request("http://localhost/hq/refresh-requests", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "nope",
+    });
+    expect(bad.status).toBe(400);
+
+    const ok = await postRefresh(open);
+    expect(ok.status).toBe(200);
+    expect((await ok.json()) as RefreshBody).toMatchObject({ ok: true, debounced: false, delivered: true });
+
+    const remote = createApp({
+      db,
+      apiToken: TOKEN,
+      webhookUrl: "http://hooks.example/hook",
+      webhookKey: "wk",
+      fetchImpl: okFetch,
+      access: { remoteAddress: () => "203.0.113.5", log: () => {} },
+    });
+    const denied = await remote.request("http://loops.example/hq/refresh-requests", { method: "POST" });
+    expect(denied.status).toBe(503);
   });
 });
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Item, Section } from "../../shared/types";
-import { getBoard, getBots, postAct, postMessage, type ActionType, type Board } from "./api";
+import { REFRESH_WAIT_MS, type Item, type Section } from "../../shared/types";
+import { getBoard, getBots, postAct, postMessage, postRefresh, type ActionType, type Board } from "./api";
 import { Banners, type Banner } from "./Banners";
 import { EmptyBoard, EmptySection, LoadError, LoadingBoard } from "./BoardStates";
 import { fallbackBots, type Bot } from "./compose";
@@ -16,6 +16,16 @@ import { formatWeekday, isVisible } from "./time";
 import { useTheme } from "./useTheme";
 
 const ADVANCES: ActionType[] = ["done", "drop", "snooze", "choose"];
+
+type RefreshWait = { requestedAt: string; syncBefore: string | null; timedOut: boolean };
+
+function syncMoved(before: string | null, after: string | null): boolean {
+  if (!after || after === before) return false;
+  if (!before) return true;
+  const next = Date.parse(after);
+  const prev = Date.parse(before);
+  return !Number.isNaN(next) && !Number.isNaN(prev) && next > prev;
+}
 
 function readStored(key: string): string | null {
   try {
@@ -41,6 +51,8 @@ export function App() {
   const [board, setBoard] = useState<Board | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [asking, setAsking] = useState(false);
+  const [waitingAt, setWaitingAt] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [banners, setBanners] = useState<Banner[]>([]);
   const [now, setNow] = useState(() => Date.now());
@@ -63,12 +75,58 @@ export function App() {
   const bannerId = useRef(0);
   modalIdRef.current = modalId;
   const loadGen = useRef(0);
+  const waitRef = useRef<RefreshWait | null>(null);
+  const refreshLock = useRef(false);
 
   const pushBanner = useCallback((kind: Banner["kind"], text: string) => {
     const id = ++bannerId.current;
     setBanners((current) => [...current.slice(-2), { id, kind, text }]);
     window.setTimeout(() => setBanners((current) => current.filter((banner) => banner.id !== id)), 4200);
   }, []);
+
+  const noteRefresh = useCallback(
+    (next: Board) => {
+      const requestedAt = next.refresh?.pending ? next.refresh.requested_at : null;
+      const wait = waitRef.current;
+      if (!requestedAt) {
+        waitRef.current = null;
+        setWaitingAt(null);
+        setAsking(false);
+        return;
+      }
+      const syncedMs = next.last_synced_at ? Date.parse(next.last_synced_at) : NaN;
+      const askedMs = Date.parse(requestedAt);
+      if (
+        wait?.requestedAt === requestedAt &&
+        syncMoved(wait.syncBefore, next.last_synced_at) &&
+        !Number.isNaN(syncedMs) &&
+        !Number.isNaN(askedMs) &&
+        syncedMs >= askedMs
+      ) {
+        waitRef.current = null;
+        setWaitingAt(null);
+        setAsking(false);
+        return;
+      }
+      const age = Date.now() - askedMs;
+      if (Number.isNaN(askedMs) || age >= REFRESH_WAIT_MS) {
+        if (wait?.requestedAt === requestedAt && !wait.timedOut) {
+          wait.timedOut = true;
+          pushBanner("notice", "No reply yet; showing what was last loaded.");
+        } else if (!wait || wait.requestedAt !== requestedAt) {
+          waitRef.current = { requestedAt, syncBefore: next.last_synced_at, timedOut: true };
+        }
+        setAsking(false);
+        return;
+      }
+      if (!wait || wait.requestedAt !== requestedAt) {
+        waitRef.current = { requestedAt, syncBefore: next.last_synced_at, timedOut: false };
+      }
+      setWaitingAt(requestedAt);
+      setAsking(true);
+    },
+    [pushBanner],
+  );
 
   const load = useCallback(
     async (silent: boolean) => {
@@ -82,6 +140,7 @@ export function App() {
         const next = await getBoard();
         if (gen !== loadGen.current || inflight.current > 0) return;
         setBoard(next);
+        noteRefresh(next);
         setLoadError(null);
         setNow(Date.now());
       } catch (err) {
@@ -93,14 +152,31 @@ export function App() {
         if (!silent && gen === loadGen.current) setLoading(false);
       }
     },
-    [pushBanner],
+    [noteRefresh, pushBanner],
   );
 
   async function refresh() {
+    if (refreshLock.current || asking) return;
+    refreshLock.current = true;
     setRefreshing(true);
+    setAsking(true);
+    try {
+      const result = await postRefresh();
+      const requestedAt = result.refresh.requested_at;
+      if (requestedAt) {
+        waitRef.current = { requestedAt, syncBefore: board?.last_synced_at ?? null, timedOut: false };
+        setWaitingAt(requestedAt);
+      }
+    } catch {
+      waitRef.current = null;
+      setWaitingAt(null);
+      setAsking(false);
+      pushBanner("error", "Couldn't refresh the board. Showing what was last loaded.");
+    }
     try {
       await load(true);
     } finally {
+      refreshLock.current = false;
       setRefreshing(false);
     }
   }
@@ -119,6 +195,30 @@ export function App() {
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, [load]);
+
+  useEffect(() => {
+    if (!asking) return;
+    const interval = window.setInterval(() => void load(true), 10_000);
+    return () => window.clearInterval(interval);
+  }, [asking, load]);
+
+  useEffect(() => {
+    if (!asking || !waitingAt) return;
+    const requestedMs = Date.parse(waitingAt);
+    if (Number.isNaN(requestedMs)) return;
+    const delay = Math.max(0, requestedMs + REFRESH_WAIT_MS - Date.now());
+    const timer = window.setTimeout(() => {
+      const wait = waitRef.current;
+      if (!wait || wait.requestedAt !== waitingAt || wait.timedOut) {
+        setAsking(false);
+        return;
+      }
+      wait.timedOut = true;
+      setAsking(false);
+      pushBanner("notice", "No reply yet; showing what was last loaded.");
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [asking, waitingAt, pushBanner]);
 
   useEffect(() => {
     document.title = "OpenLoops";
@@ -272,6 +372,7 @@ export function App() {
           filter={filter}
           onFilter={chooseFilter}
           refreshing={refreshing}
+          asking={asking}
           onRefresh={() => void refresh()}
           blur={blur}
           onBlur={toggleBlur}
