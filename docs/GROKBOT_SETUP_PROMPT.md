@@ -61,6 +61,7 @@ The body looks like this:
 - `choose` — I picked a decision. `value` is the option's `value` (not the label). Do that thing. The card is already done.
 - `move` — I dragged it to another section. `value` is the new section. Treat that as a correction of your filing.
 - `message` — I wrote to you from the message box at the top of the board. `item_id`, `external_key`, and `title` are null. `value` is the text. Respond to it as a fresh note from me. If the body also has `to` and `to_name`, I tagged one of your other bots with `@` (see section 5): `to` is its handle and `to_name` its name, and the tag is already stripped from `value`. Pass `value` on to that bot instead of acting on it yourself, then remember that you relayed it. Without `to`, the message is for you, even when it starts with an `@word`.
+- `refresh_requested` — I pressed Refresh. `item_id`, `external_key`, `title`, and `value` are null. `requested_at` is when I asked, and it matches `at`. Run the sync routine in section 4 now, then `POST {URL}/api/sync/complete`. That clears the "Asking…" state on the board. Handle it in the same place as the other types, so a copy that shows up in `GET /api/events` or the outbox runs the sync too. If you already handled this `at`, do not start a second sync. A second press within 10 minutes does not send another webhook.
 
 If the delivery is a type you do not know, store the body in memory and tell me, and do not guess.
 
@@ -79,6 +80,8 @@ Until those two are set, my actions are still saved. They queue in the outbox. Y
 
 Create a second routine on a schedule. Suggest every 30 minutes while I am likely to be around, plus once in the morning, and let me change the cadence before you save it.
 
+Also run this routine as soon as a `refresh_requested` webhook arrives (section 2). Do not wait for the next scheduled time. The board shows "Asking…" until you finish with `POST /api/sync/complete`.
+
 Each run:
 
 1. Read `OPENLOOPS_API_TOKEN` from the secret store. Send `Authorization: Bearer <token>` and `Content-Type: application/json` on every `/api` call.
@@ -88,7 +91,7 @@ Each run:
 5. Catch up anything the webhook missed: `GET {URL}/api/events?since={cursor}`. The cursor is exclusive. Only my actions are in this list (`actor` is `user`). Store the cursor in memory after you have acted on the page.
 6. Drain leftovers: `GET {URL}/api/outbox`, act on each payload the same way as a webhook delivery, then `POST {URL}/api/outbox/ack` with `{"ids":[...]}` for the ones you handled. Ack only ids you successfully handled.
 7. If your list of other bots changed since the last run, publish it again (section 5).
-8. `POST {URL}/api/sync/complete` with `{}` or `{"at":"<ISO time>"}`. That sets the "last synced" line in the sidebar.
+8. `POST {URL}/api/sync/complete` with `{}` or `{"at":"<ISO time>"}`. That sets the "last synced" line in the sidebar and clears a pending Refresh. A scheduled run clears it too, which is what should happen: the board was waiting for a sync, and this is one.
 
 Keep the token out of the routine's visible prompt. Refer to the secret by name.
 
@@ -162,6 +165,7 @@ Do these and tell me the result of each. Do not print the token or the webhook k
 - [ ] I mark that card done, or you close it with the API if I ask you to. It leaves the open lists.
 - [ ] I take one action on the board (done, snooze, drop, reply, a decision, or a drag). Your webhook routine receives it, or, if the webhook URL is not set yet, the event is in `GET /api/outbox` and your sync routine acks it.
 - [ ] `POST /api/sync/complete` runs, and the sidebar can show a sync time.
+- [ ] I press Refresh. You receive `refresh_requested` (or it is in `GET /api/outbox`), you run a sync, and `POST /api/sync/complete` clears the pending refresh.
 - [ ] If you work with other bots: `PUT /api/bots` returns each bot's handle, I can pick one after typing `@` on the board, and a tagged message reaches you with `to` set and you relay it.
 - [ ] The token and the webhook key are only in the secrets store. They are not in memory, the routine text, or this chat.
 - [ ] The name on the board matches `ASSISTANT_NAME` on the server (the default is Assistant). You did not hardcode a person's name into cards.

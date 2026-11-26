@@ -1,11 +1,14 @@
-import type { Item } from "../../shared/types";
+import type { Item, RefreshState } from "../../shared/types";
 import type { Bot } from "./compose";
+
+export type { RefreshState };
 
 export type Board = {
   generated_at: string;
   assistant_name: string;
   last_synced_at: string | null;
   outbox_count: number;
+  refresh: RefreshState;
   items: Item[];
 };
 
@@ -20,6 +23,14 @@ export type MessageResult = {
   ok: boolean;
   delivered: boolean;
   outbox_count: number;
+};
+
+export type RefreshResult = {
+  ok: boolean;
+  debounced: boolean;
+  delivered: boolean;
+  outbox_count: number;
+  refresh: RefreshState;
 };
 
 export type ActionType = "done" | "snooze" | "drop" | "reply" | "choose" | "move";
@@ -62,6 +73,16 @@ export async function postAct(id: number, type: ActionType, value?: string): Pro
   });
   if (!res.ok) throw new Error(await readError(res));
   return (await res.json()) as ActResult;
+}
+
+export async function postRefresh(): Promise<RefreshResult> {
+  const res = await fetch("/hq/refresh-requests", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(await readError(res));
+  return (await res.json()) as RefreshResult;
 }
 
 export async function postMessage(text: string, to?: string): Promise<MessageResult> {

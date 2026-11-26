@@ -21,6 +21,8 @@ type Props = {
   /** List: show only that section. Kanban: scroll its column into view. */
   onFilter: (filter: SectionFilter) => void;
   refreshing: boolean;
+  /** A refresh webhook is waiting for the assistant to finish a sync. */
+  asking: boolean;
   onRefresh: () => void;
   blur: boolean;
   onBlur: () => void;
@@ -77,8 +79,14 @@ export function Sidebar(props: Props) {
   const tools = (where: string) => (
     <>
       <div className="ol-row">
-        <Btn size="sm" onClick={props.onRefresh} disabled={props.refreshing}>
-          {props.refreshing ? "Refreshing…" : "Refresh"}
+        <Btn
+          size="sm"
+          onClick={props.onRefresh}
+          disabled={props.refreshing || props.asking}
+          pending={props.asking}
+          aria-busy={props.asking || undefined}
+        >
+          {props.asking ? `Asking ${props.assistantName}…` : "Refresh"}
         </Btn>
         <Btn size="sm" aria-pressed={props.blur} onClick={props.onBlur}>
           {props.blur ? "Show text" : "Blur for sharing"}
@@ -116,12 +124,14 @@ export function Sidebar(props: Props) {
             </>
           )}
         </span>
-        <span className={`ol-sync${props.lastSyncedAt ? "" : " is-stale"}`}>
-          {!props.loaded
-            ? "Loading the board"
-            : props.lastSyncedAt
-              ? `Synced from ${name} · ${ago(props.lastSyncedAt, props.now)}`
-              : `${name} hasn't synced yet`}
+        <span className={`ol-sync${props.asking || props.lastSyncedAt ? "" : " is-stale"}`}>
+          {props.asking
+            ? `Asking ${name}…`
+            : !props.loaded
+              ? "Loading the board"
+              : props.lastSyncedAt
+                ? `Synced from ${name} · ${ago(props.lastSyncedAt, props.now)}`
+                : `${name} hasn't synced yet`}
         </span>
         {props.outboxCount > 0 && (
           <span className="ol-chip is-warn">

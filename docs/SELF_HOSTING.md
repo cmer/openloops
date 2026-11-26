@@ -44,7 +44,7 @@ Copy `.env.example`. Do not commit a filled-in `.env`.
 
 ## Cloudflare Tunnel and Access
 
-The UI routes (`/`, static files, `/hq/board`, `/hq/items/:id`, `/hq/items/:id/act`, `/hq/message`) are not a login form. They require a Cloudflare Access JWT (`Cf-Access-Jwt-Assertion`, or the `CF_Authorization` cookie) signed by the team's keys. `/api` keeps using `API_TOKEN`. `/healthz` stays open so Docker and the tunnel can probe it.
+The UI routes (`/`, static files, `/hq/board`, `/hq/items/:id`, `/hq/items/:id/act`, `/hq/message`, `/hq/refresh-requests`) are not a login form. They require a Cloudflare Access JWT (`Cf-Access-Jwt-Assertion`, or the `CF_Authorization` cookie) signed by the team's keys. `/api` keeps using `API_TOKEN`. `/healthz` stays open so Docker and the tunnel can probe it.
 
 Access usually bypasses `/api` and `/healthz`. The app still checks the bearer token on `/api`.
 
